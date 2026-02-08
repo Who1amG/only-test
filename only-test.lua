@@ -2112,8 +2112,8 @@ local function createItemBtn(name, price, isPotion)
     local fnt = Fonts[CurrentSettings.Font] or Fonts.Modern
 
     local itemFr = Instance.new("Frame")
-    itemFr.Size = UDim2.new(1, -4, 0, 36)
-    -- Color de fondo del item: Un poco más claro que el fondo oscuro principal
+    -- Aumentar un poco la altura en móvil para acomodar dos líneas cómodamente
+    itemFr.Size = UDim2.new(1, -4, 0, isMb and 42 or 36)
     local r, g, b = thm.MainBg.R, thm.MainBg.G, thm.MainBg.B
     itemFr.BackgroundColor3 = Color3.new(r * 0.5, g * 0.5, b * 0.5)
     itemFr.BorderSizePixel = 0
@@ -2123,62 +2123,100 @@ local function createItemBtn(name, price, isPotion)
     ic.CornerRadius = UDim.new(0, 6)
     ic.Parent = itemFr
     
+    -- ==========================================
+    -- [ ÁREA IZQUIERDA: INFO (Nombre + Precio) ]
+    -- ==========================================
+    
+    -- Contenedor de Info para facilitar alineación vertical
+    local infoContainer = Instance.new("Frame")
+    infoContainer.Name = "Info"
+    infoContainer.Size = UDim2.new(0.55, 0, 1, 0) -- Ocupa el 55% del ancho izquierdo
+    infoContainer.Position = UDim2.new(0, 8, 0, 0)
+    infoContainer.BackgroundTransparency = 1
+    infoContainer.Parent = itemFr
+
     local nm = Instance.new("TextLabel")
-    nm.Size = UDim2.new(0.5, 0, 1, 0) -- Reducimos ancho para dar espacio a botones
-    nm.Position = UDim2.new(0, 8, 0, 0)
+    nm.Name = "Name"
     nm.BackgroundTransparency = 1
-    
-    -- Ajuste para nombres largos en móvil
-    if isMb then
-        nm.Text = name:gsub(" ", "\n") -- Salto de línea en espacios
-        nm.TextSize = 10
-        nm.TextWrapped = true
-    else
-        nm.Text = name
-        nm.TextSize = 12
-    end
-    
+    nm.Text = name
     nm.TextColor3 = thm.Text
     nm.TextXAlignment = Enum.TextXAlignment.Left
     nm.Font = fnt.Header
-    nm.Parent = itemFr
+    nm.Parent = infoContainer
 
     local prL = Instance.new("TextLabel")
-    prL.Size = UDim2.new(0, 50, 1, 0)
-    prL.Position = UDim2.new(0.5, 5, 0, 0) -- Ajustado
+    prL.Name = "Price"
     prL.BackgroundTransparency = 1
     prL.Text = "$" .. tostring(price)
-    prL.TextColor3 = Color3.fromRGB(255, 215, 0) -- Precio en dorado siempre destaca bien
+    prL.TextColor3 = Color3.fromRGB(255, 215, 0) -- Dorado
     prL.Font = fnt.Body
-    prL.TextSize = 11
     prL.TextXAlignment = Enum.TextXAlignment.Left
-    prL.Parent = itemFr
+    prL.Parent = infoContainer
     
-    -- Contenedor derecho para alinear botones
+    -- Ajuste Específico para Móvil vs PC
+    if isMb then
+        -- Layout Vertical: Nombre Arriba, Precio Abajo
+        nm.Size = UDim2.new(1, 0, 0.5, 0)
+        nm.Position = UDim2.new(0, 0, 0, 2)
+        nm.TextYAlignment = Enum.TextYAlignment.Bottom
+        nm.TextSize = 11
+        nm.TextWrapped = true -- Permitir wrap natural sin cortar palabras forzadamente
+        
+        prL.Size = UDim2.new(1, 0, 0.4, 0)
+        prL.Position = UDim2.new(0, 0, 0.5, 0)
+        prL.TextYAlignment = Enum.TextYAlignment.Top
+        prL.TextSize = 11
+    else
+        -- Layout Horizontal Compacto (Original PC)
+        nm.Size = UDim2.new(1, 0, 1, 0)
+        nm.Position = UDim2.new(0, 0, 0, 0)
+        nm.TextYAlignment = Enum.TextYAlignment.Center
+        nm.TextSize = 12
+        
+        -- En PC el precio va a la derecha del nombre o se maneja distinto, 
+        -- pero para mantener consistencia con el diseño anterior en PC:
+        -- El diseño anterior tenía el precio separado. Vamos a integrarlo mejor aquí también.
+        -- Para PC, ponemos el precio un poco más a la derecha dentro del container o usamos el layout anterior.
+        -- Usaremos un layout híbrido: Nombre ocupa todo, Precio se posiciona manualmente.
+        
+        nm.Size = UDim2.new(0.7, 0, 1, 0)
+        prL.Size = UDim2.new(0.3, 0, 1, 0)
+        prL.Position = UDim2.new(0.7, 0, 0, 0)
+    end
+    
+    -- ==========================================
+    -- [ ÁREA DERECHA: ACCIONES (Botones) ]
+    -- ==========================================
+    
     local rightOffset = -4
+    local btnHeight = isMb and 22 or 24
+    local btnWidth = isMb and 36 or 40
+    local inputWidth = isMb and 22 or 25
+    local fontSize = isMb and 9 or 10
     
-    -- Botón Comprar
+    -- Botón Comprar (BUY)
     local buyBtn = Instance.new("TextButton")
-    buyBtn.Size = UDim2.new(0, 40, 0, 24)
-    buyBtn.Position = UDim2.new(1, rightOffset - 40, 0.5, -12)
+    buyBtn.Size = UDim2.new(0, btnWidth, 0, btnHeight)
+    buyBtn.Position = UDim2.new(1, rightOffset - btnWidth, 0.5, -btnHeight/2)
     buyBtn.BackgroundColor3 = Color3.fromRGB(50, 205, 50)
     buyBtn.Text = "BUY"
     buyBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
     buyBtn.Font = fnt.Header
-    buyBtn.TextSize = 10
+    buyBtn.TextSize = fontSize
     buyBtn.Parent = itemFr
     
     local bC = Instance.new("UICorner")
     bC.CornerRadius = UDim.new(0, 4)
     bC.Parent = buyBtn
     
-    rightOffset = rightOffset - 45 -- Espacio para el siguiente elemento
+    rightOffset = rightOffset - (btnWidth + 4) -- Espacio para el siguiente elemento
     
+    -- Input Cantidad (Solo pociones)
     local qtyInput
     if isPotion then
         qtyInput = Instance.new("TextBox")
-        qtyInput.Size = UDim2.new(0, 25, 0, 24)
-        qtyInput.Position = UDim2.new(1, rightOffset - 25, 0.5, -12)
+        qtyInput.Size = UDim2.new(0, inputWidth, 0, btnHeight)
+        qtyInput.Position = UDim2.new(1, rightOffset - inputWidth, 0.5, -btnHeight/2)
         qtyInput.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
         qtyInput.Text = "1"
         qtyInput.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -2198,18 +2236,18 @@ local function createItemBtn(name, price, isPotion)
             qtyInput.Text = tostring(n)
         end)
         
-        rightOffset = rightOffset - 30 -- Espacio tras el input
+        rightOffset = rightOffset - (inputWidth + 4)
     end
     
-    -- Botón VIEW
+    -- Botón Ver (VIEW)
     local viewBtn = Instance.new("TextButton")
-    viewBtn.Size = UDim2.new(0, 40, 0, 24)
-    viewBtn.Position = UDim2.new(1, rightOffset - 40, 0.5, -12)
-    viewBtn.BackgroundColor3 = Color3.fromRGB(60, 100, 200) -- Azul para diferenciar
+    viewBtn.Size = UDim2.new(0, btnWidth, 0, btnHeight)
+    viewBtn.Position = UDim2.new(1, rightOffset - btnWidth, 0.5, -btnHeight/2)
+    viewBtn.BackgroundColor3 = Color3.fromRGB(60, 100, 200)
     viewBtn.Text = "VIEW"
     viewBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
     viewBtn.Font = fnt.Header
-    viewBtn.TextSize = 10
+    viewBtn.TextSize = fontSize
     viewBtn.Parent = itemFr
     
     local vC = Instance.new("UICorner")
