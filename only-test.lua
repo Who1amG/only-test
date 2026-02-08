@@ -328,7 +328,7 @@ end
 
 local isMb = isDv()
 local scW = isMb and 340 or 520
-local scH = isMb and 380 or 440
+local scH = isMb and 320 or 440
 
 -- ============================================
 -- [ CREAR SCREENGUI ]
@@ -1719,6 +1719,24 @@ local function toggleFly()
                 if UserInputService:IsKeyDown(Enum.KeyCode.E) then moveDir = moveDir + Vector3.new(0,1,0) end
                 if UserInputService:IsKeyDown(Enum.KeyCode.Q) then moveDir = moveDir - Vector3.new(0,1,0) end
                 
+                -- Soporte Móvil (Joystick Virtual)
+                if hum and hum.MoveDirection.Magnitude > 0 then
+                    local joyDir = hum.MoveDirection
+                    moveDir = moveDir + joyDir
+                    
+                    -- Volar hacia donde mira la cámara (Camera Relative Height)
+                    if math.abs(look.Y) > 0.1 then
+                        local flatLook = Vector3.new(look.X, 0, look.Z).Unit
+                        local dot = joyDir:Dot(flatLook)
+                        
+                        if dot > 0.5 then -- Avanzando
+                             moveDir = moveDir + Vector3.new(0, look.Y, 0)
+                        elseif dot < -0.5 then -- Retrocediendo
+                             moveDir = moveDir - Vector3.new(0, look.Y, 0)
+                        end
+                    end
+                end
+                
                 local currentSpeed = flySpeed
                 if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then currentSpeed = flySpeed * 3 end
                 
@@ -1752,7 +1770,8 @@ _G.FlyKeyConnection = game:GetService("UserInputService").InputBegan:Connect(fun
     end
 end)
 
-crEB("Misc", 2, Color3.fromRGB(150, 100, 255), {
+-- Construir botones Misc dinámicamente
+local miscBtns = {
     {
         text = "Speed Hack (Toggle)",
         onClick = function()
@@ -1789,8 +1808,12 @@ crEB("Misc", 2, Color3.fromRGB(150, 100, 255), {
         onClick = function()
             toggleFly()
         end
-    },
-    {
+    }
+}
+
+-- Agregar opción de Keybind solo para PC
+if not isMb then
+    table.insert(miscBtns, {
         text = "Set Fly Keybind (PC)",
         onClick = function()
             adLg("PRESS ANY KEY NOW...", "warning")
@@ -1800,8 +1823,10 @@ crEB("Misc", 2, Color3.fromRGB(150, 100, 255), {
                 adLg("FLY KEY SET TO: " .. input.KeyCode.Name, "success")
             end
         end
-    }
-}, "92660651692951")
+    })
+end
+
+crEB("Misc", 2, Color3.fromRGB(150, 100, 255), miscBtns, "92660651692951")
 
 crEB("Sell Options", 3, Color3.fromRGB(255, 100, 150), {
     {
@@ -2001,6 +2026,7 @@ local function enableDrag(frame)
 end
 
 enableDrag(StoreUI)
+enableDrag(MF) -- Drag Anywhere para Main Frame
 
 local uiCorner = Instance.new("UICorner")
 uiCorner.CornerRadius = UDim.new(0, 12)
@@ -2101,11 +2127,20 @@ local function createItemBtn(name, price, isPotion)
     nm.Size = UDim2.new(0.5, 0, 1, 0) -- Reducimos ancho para dar espacio a botones
     nm.Position = UDim2.new(0, 8, 0, 0)
     nm.BackgroundTransparency = 1
-    nm.Text = name
+    
+    -- Ajuste para nombres largos en móvil
+    if isMb then
+        nm.Text = name:gsub(" ", "\n") -- Salto de línea en espacios
+        nm.TextSize = 10
+        nm.TextWrapped = true
+    else
+        nm.Text = name
+        nm.TextSize = 12
+    end
+    
     nm.TextColor3 = thm.Text
     nm.TextXAlignment = Enum.TextXAlignment.Left
     nm.Font = fnt.Header
-    nm.TextSize = 12
     nm.Parent = itemFr
 
     local prL = Instance.new("TextLabel")
