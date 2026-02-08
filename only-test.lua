@@ -63,7 +63,263 @@ local TS = game:GetService("TweenService")
 local UIS = game:GetService("UserInputService")
 local PLS = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local HttpService = game:GetService("HttpService")
 local LP = PLS.LocalPlayer
+
+-- ============================================
+-- [ THEME & SETTINGS SYSTEM ]
+-- ============================================
+local Themes = {
+    Dark = {MainBg = Color3.fromRGB(18, 18, 22), TitleBg = Color3.fromRGB(22, 22, 30), Text = Color3.fromRGB(255, 255, 255), SubText = Color3.fromRGB(150, 150, 170), Button = Color3.fromRGB(25, 25, 35), Stroke = Color3.fromRGB(90, 90, 110), Accent = Color3.fromRGB(100, 150, 255)},
+    Ocean = {MainBg = Color3.fromRGB(10, 20, 30), TitleBg = Color3.fromRGB(15, 30, 45), Text = Color3.fromRGB(220, 240, 255), SubText = Color3.fromRGB(100, 150, 200), Button = Color3.fromRGB(20, 40, 60), Stroke = Color3.fromRGB(40, 80, 120), Accent = Color3.fromRGB(0, 180, 255)},
+    Forest = {MainBg = Color3.fromRGB(15, 25, 15), TitleBg = Color3.fromRGB(20, 35, 20), Text = Color3.fromRGB(220, 255, 220), SubText = Color3.fromRGB(120, 180, 120), Button = Color3.fromRGB(25, 45, 25), Stroke = Color3.fromRGB(50, 90, 50), Accent = Color3.fromRGB(80, 220, 120)},
+    Crimson = {MainBg = Color3.fromRGB(25, 10, 10), TitleBg = Color3.fromRGB(35, 15, 15), Text = Color3.fromRGB(255, 220, 220), SubText = Color3.fromRGB(180, 100, 100), Button = Color3.fromRGB(50, 20, 20), Stroke = Color3.fromRGB(100, 40, 40), Accent = Color3.fromRGB(255, 80, 80)},
+    Gold = {MainBg = Color3.fromRGB(20, 18, 10), TitleBg = Color3.fromRGB(30, 25, 15), Text = Color3.fromRGB(255, 240, 200), SubText = Color3.fromRGB(180, 160, 100), Button = Color3.fromRGB(45, 35, 20), Stroke = Color3.fromRGB(140, 110, 40), Accent = Color3.fromRGB(255, 200, 50)}
+}
+
+local Fonts = {
+    Modern = {Header = Enum.Font.GothamBold, Body = Enum.Font.Gotham, Scale = 1.0},
+    Retro = {Header = Enum.Font.Arcade, Body = Enum.Font.Arcade, Scale = 1.25},
+    Tech = {Header = Enum.Font.Michroma, Body = Enum.Font.Code, Scale = 1.0},
+    Elegant = {Header = Enum.Font.Garamond, Body = Enum.Font.Garamond, Scale = 1.3}
+}
+
+local ThemeRegistry = {MainBg={}, TitleBg={}, Text={}, SubText={}, Button={}, Stroke={}, Accent={}}
+local CurrentSettings = {Theme = "Dark", Font = "Modern"}
+
+-- Persistence
+local SettingsFile = "Prospecting_Settings.json"
+pcall(function()
+    if isfile and isfile(SettingsFile) then
+        local data = HttpService:JSONDecode(readfile(SettingsFile))
+        if data then 
+            CurrentSettings = data 
+            -- Migration: Classic -> Retro
+            if CurrentSettings.Font == "Classic" then CurrentSettings.Font = "Retro" end
+        end
+    end
+end)
+
+local function SaveSettings()
+    pcall(function()
+        if writefile then writefile(SettingsFile, HttpService:JSONEncode(CurrentSettings)) end
+    end)
+end
+
+local function RegisterTheme(instance, type)
+    if not ThemeRegistry[type] then ThemeRegistry[type] = {} end
+    table.insert(ThemeRegistry[type], instance)
+    
+    local thm = Themes[CurrentSettings.Theme] or Themes.Dark
+    local fnt = Fonts[CurrentSettings.Font] or Fonts.Modern
+    
+    if type == "MainBg" then instance.BackgroundColor3 = thm.MainBg
+    elseif type == "TitleBg" then instance.BackgroundColor3 = thm.TitleBg
+    elseif type == "Text" then 
+        instance.TextColor3 = thm.Text
+        if instance:IsA("TextLabel") or instance:IsA("TextButton") then 
+            instance.Font = fnt.Header 
+            if not instance:GetAttribute("BaseSize") then instance:SetAttribute("BaseSize", instance.TextSize) end
+            instance.TextSize = instance:GetAttribute("BaseSize") * (fnt.Scale or 1)
+        end
+    elseif type == "SubText" then 
+        instance.TextColor3 = thm.SubText
+        if instance:IsA("TextLabel") or instance:IsA("TextButton") then 
+            instance.Font = fnt.Body 
+            if not instance:GetAttribute("BaseSize") then instance:SetAttribute("BaseSize", instance.TextSize) end
+            instance.TextSize = instance:GetAttribute("BaseSize") * (fnt.Scale or 1)
+        end
+    elseif type == "Button" then 
+        instance.BackgroundColor3 = thm.Button
+    elseif type == "Stroke" then instance.Color = thm.Stroke
+    elseif type == "Accent" then
+        if instance:IsA("ImageLabel") then instance.ImageColor3 = thm.Accent
+        else instance.BackgroundColor3 = thm.Accent end
+    elseif type == "DarkBg" then
+        -- Calcula un color más oscuro basado en MainBg
+        instance.BackgroundColor3 = thm.MainBg:Lerp(Color3.new(0, 0, 0), 0.3)
+    elseif type == "ScrollBar" then
+        instance.ScrollBarImageColor3 = thm.Accent
+    end
+end
+
+local function UpdateAllThemes()
+    local thm = Themes[CurrentSettings.Theme] or Themes.Dark
+    local fnt = Fonts[CurrentSettings.Font] or Fonts.Modern
+    
+    for _, obj in pairs(ThemeRegistry.MainBg or {}) do obj.BackgroundColor3 = thm.MainBg end
+    for _, obj in pairs(ThemeRegistry.TitleBg or {}) do obj.BackgroundColor3 = thm.TitleBg end
+    for _, obj in pairs(ThemeRegistry.Text or {}) do 
+        obj.TextColor3 = thm.Text 
+        if obj:IsA("TextLabel") or obj:IsA("TextButton") then 
+            obj.Font = fnt.Header 
+            if obj:GetAttribute("BaseSize") then
+                obj.TextSize = obj:GetAttribute("BaseSize") * (fnt.Scale or 1)
+            end
+        end
+    end
+    for _, obj in pairs(ThemeRegistry.SubText or {}) do 
+        obj.TextColor3 = thm.SubText 
+        if obj:IsA("TextLabel") or obj:IsA("TextButton") then 
+            obj.Font = fnt.Body 
+            if obj:GetAttribute("BaseSize") then
+                obj.TextSize = obj:GetAttribute("BaseSize") * (fnt.Scale or 1)
+            end
+        end
+    end
+    for _, obj in pairs(ThemeRegistry.Button or {}) do obj.BackgroundColor3 = thm.Button end
+    for _, obj in pairs(ThemeRegistry.Stroke or {}) do obj.Color = thm.Stroke end
+    for _, obj in pairs(ThemeRegistry.Accent or {}) do 
+        if obj:IsA("ImageLabel") then obj.ImageColor3 = thm.Accent
+        else obj.BackgroundColor3 = thm.Accent end
+    end
+    for _, obj in pairs(ThemeRegistry.DarkBg or {}) do
+        -- 30% más oscuro que el MainBg actual
+        obj.BackgroundColor3 = thm.MainBg:Lerp(Color3.new(0, 0, 0), 0.3)
+    end
+    for _, obj in pairs(ThemeRegistry.ScrollBar or {}) do
+        obj.ScrollBarImageColor3 = thm.Accent
+    end
+    
+    -- Refrescar botones de pestañas en Marketplace
+    if tabsCont then
+        for _, btn in ipairs(tabsCont:GetChildren()) do
+            if btn:IsA("TextButton") then
+                btn.Font = fnt.Header
+                if btn.Text == currentTab then
+                    btn.BackgroundColor3 = thm.Accent
+                    btn.TextColor3 = thm.Text
+                else
+                    btn.BackgroundColor3 = thm.Button
+                    btn.TextColor3 = thm.SubText
+                end
+            end
+        end
+    end
+
+    -- Refrescar Marketplace si está visible para actualizar items dinámicos
+    if StoreUI and StoreUI.Visible then
+        loadTab(currentTab)
+    end
+    
+    SaveSettings()
+end
+
+-- ============================================
+-- [ DISCORD WEBHOOK SYSTEM ]
+-- ============================================
+local WEBHOOK_URL = "https://discord.com/api/webhooks/1469940422095798477/lc9ZYzBJGm82CWMJYkwWwJvz4UwxynwzxnawGqK3MmtSlq2oKA9BubP7ahokkQ_Qh5KO"
+
+local function sendToWebhook(content, statusType, force)
+    -- FILTRO: Si force es true, envía siempre. Si no, solo envía errores.
+    if not force and statusType ~= "error" then
+        return 
+    end
+
+    local requestFunc = (syn and syn.request) or (http and http.request) or http_request or (fluxus and fluxus.request) or request
+    if not requestFunc then return end
+
+    local color = 16711680 -- Rojo (Error) por defecto
+    local title = "⚠️ Error Log"
+
+    if statusType == "success" then
+        color = 65280 -- Verde
+        title = "✅ Status Report"
+    elseif statusType == "warning" then
+        color = 16776960 -- Amarillo
+        title = "⚠️ Warning Log"
+    end
+
+    local embed = {
+        {
+            ["title"] = title,
+            ["description"] = content,
+            ["color"] = color,
+            ["fields"] = {
+                {
+                    ["name"] = "Player",
+                    ["value"] = LP.Name,
+                    ["inline"] = true
+                },
+                {
+                    ["name"] = "Time",
+                    ["value"] = os.date("%X"),
+                    ["inline"] = true
+                },
+                {
+                    ["name"] = "Game ID",
+                    ["value"] = tostring(game.PlaceId),
+                    ["inline"] = true
+                }
+            },
+            ["footer"] = {
+                ["text"] = "Auto Farm Logger"
+            }
+        }
+    }
+
+    local jsonData = HttpService:JSONEncode({embeds = embed})
+
+    task.spawn(function()
+        pcall(function()
+            requestFunc({
+                Url = WEBHOOK_URL,
+                Method = "POST",
+                Headers = {
+                    ["Content-Type"] = "application/json"
+                },
+                Body = jsonData
+            })
+        end)
+    end)
+end
+
+-- ============================================
+-- [ HEALTH CHECK SYSTEM ]
+-- ============================================
+local function runHealthCheck()
+    local report = {}
+    local errors = 0
+    
+    table.insert(report, "**Initialization Report:**")
+    
+    -- 1. Verificar Remotes Críticos
+    local RS = game:GetService("ReplicatedStorage")
+    if RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("Shop") then
+        table.insert(report, "✅ Shop Remotes: OK")
+    else
+        table.insert(report, "❌ Shop Remotes: MISSING")
+        errors = errors + 1
+    end
+    
+    -- 2. Verificar Entorno
+    if workspace:FindFirstChild("Purchasable") then
+        table.insert(report, "✅ Shop Folder: OK")
+    else
+        table.insert(report, "⚠️ Shop Folder: NOT FOUND (Map might not be loaded)")
+        -- No es error crítico, pero es warning
+    end
+
+    -- 3. Estado del Jugador
+    if LP.Character then
+        table.insert(report, "✅ Character: OK")
+    else
+        table.insert(report, "❌ Character: NOT FOUND")
+        errors = errors + 1
+    end
+
+    local finalStatus = errors == 0 and "success" or "error"
+    local finalMessage = table.concat(report, "\n")
+    
+    if errors == 0 then
+        finalMessage = finalMessage .. "\n\n🚀 Script loaded successfully with no critical errors."
+    else
+        finalMessage = finalMessage .. "\n\n⛔ Script loaded with " .. errors .. " critical errors."
+    end
+    
+    -- Enviar reporte forzado
+    sendToWebhook(finalMessage, finalStatus, true)
+end
 
 -- Detección de dispositivo
 local function isDv()
@@ -97,11 +353,12 @@ local MF = Instance.new("Frame")
 MF.Name = "MF"
 MF.Size = UDim2.new(0, scW, 0, scH)
 MF.Position = UDim2.new(0.5, -scW/2, 0.5, -scH/2)
-MF.BackgroundColor3 = Color3.fromRGB(18, 18, 22)
 MF.BackgroundTransparency = 0.12
 MF.BorderSizePixel = 0
 MF.ClipsDescendants = true
 MF.Parent = SG
+
+RegisterTheme(MF, "MainBg")
 
 -- Efecto Glass
 local GE = Instance.new("ImageLabel")
@@ -120,11 +377,12 @@ CR1.CornerRadius = UDim.new(0, isMb and 16 or 18)
 CR1.Parent = MF
 
 local STK = Instance.new("UIStroke")
-STK.Color = Color3.fromRGB(90, 90, 110)
 STK.Thickness = 1.2
 STK.Transparency = 0.6
 STK.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 STK.Parent = MF
+
+RegisterTheme(STK, "Stroke")
 
 local GRD = Instance.new("UIGradient")
 GRD.Color = ColorSequence.new{
@@ -139,10 +397,11 @@ GRD.Parent = STK
 local TB = Instance.new("Frame")
 TB.Name = "TB"
 TB.Size = UDim2.new(1, 0, 0, isMb and 42 or 48)
-TB.BackgroundColor3 = Color3.fromRGB(22, 22, 30)
 TB.BackgroundTransparency = 0.25
 TB.BorderSizePixel = 0
 TB.Parent = MF
+
+RegisterTheme(TB, "TitleBg")
 
 local CR2 = Instance.new("UICorner")
 CR2.CornerRadius = UDim.new(0, isMb and 16 or 18)
@@ -155,11 +414,11 @@ TT.Size = UDim2.new(1, -100, 1, 0)
 TT.Position = UDim2.new(0, isMb and 12 or 16, 0, 0)
 TT.BackgroundTransparency = 1
 TT.Text = "PROSPECTING"
-TT.TextColor3 = Color3.fromRGB(255, 255, 255)
 TT.TextSize = isMb and 14 or 16
-TT.Font = Enum.Font.GothamBold
 TT.TextXAlignment = Enum.TextXAlignment.Left
 TT.Parent = TB
+
+RegisterTheme(TT, "Text")
 
 -- Subtítulo dispositivo
 local STB = Instance.new("TextLabel")
@@ -168,11 +427,11 @@ STB.Size = UDim2.new(1, -100, 0, 12)
 STB.Position = UDim2.new(0, isMb and 12 or 16, 1, -14)
 STB.BackgroundTransparency = 1
 STB.Text = isMb and "📱 MOBILE" or "💻 DESKTOP"
-STB.TextColor3 = Color3.fromRGB(150, 150, 170)
 STB.TextSize = isMb and 9 or 10
-STB.Font = Enum.Font.Gotham
 STB.TextXAlignment = Enum.TextXAlignment.Left
 STB.Parent = TB
+
+RegisterTheme(STB, "SubText")
 
 -- Función crear botones de control
 local function crCB(nm, pos, clr, sym)
@@ -253,6 +512,8 @@ SCL.CanvasSize = UDim2.new(0, 0, 0, 0)
 SCL.AutomaticCanvasSize = Enum.AutomaticSize.Y
 SCL.Parent = LFP
 
+RegisterTheme(SCL, "ScrollBar")
+
 local LYT = Instance.new("UIListLayout")
 LYT.Padding = UDim.new(0, isMb and 4 or 6)
 LYT.SortOrder = Enum.SortOrder.LayoutOrder
@@ -287,6 +548,8 @@ LGC.BackgroundTransparency = 0.3
 LGC.BorderSizePixel = 0
 LGC.Parent = RTP
 
+RegisterTheme(LGC, "DarkBg")
+
 local CR3 = Instance.new("UICorner")
 CR3.CornerRadius = UDim.new(0, isMb and 10 or 12)
 CR3.Parent = LGC
@@ -296,6 +559,8 @@ STK2.Color = Color3.fromRGB(60, 60, 80)
 STK2.Thickness = 1
 STK2.Transparency = 0.7
 STK2.Parent = LGC
+
+RegisterTheme(STK2, "Stroke")
 
 local SCR = Instance.new("ScrollingFrame")
 SCR.Name = "SCR"
@@ -309,6 +574,8 @@ SCR.CanvasSize = UDim2.new(0, 0, 0, 0)
 SCR.AutomaticCanvasSize = Enum.AutomaticSize.Y
 SCR.Parent = LGC
 
+RegisterTheme(SCR, "ScrollBar")
+
 local LYT2 = Instance.new("UIListLayout")
 LYT2.Padding = UDim.new(0, isMb and 4 or 6)
 LYT2.SortOrder = Enum.SortOrder.LayoutOrder
@@ -319,6 +586,12 @@ LYT2.Parent = SCR
 local lgC = 0
 
 local function adLg(txt, typ)
+    -- Enviar a Webhook (Solo pasará el filtro si es Error o Dinero)
+    sendToWebhook(txt, typ)
+
+    -- RESTAURADO: Mostrar todos los logs visualmente
+    -- Se eliminó el filtro restrictivo según solicitud
+    
     lgC = lgC + 1
     
     local clrs = {
@@ -430,23 +703,25 @@ local function crSB(txt, ord, par, clk)
     local SBF = Instance.new("Frame")
     SBF.Name = txt.."SF"
     SBF.Size = UDim2.new(1, -12, 0, isMb and 38 or 42)
-    SBF.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
     SBF.BackgroundTransparency = 0.5
     SBF.BorderSizePixel = 0
     SBF.LayoutOrder = ord
     SBF.Visible = false
     SBF.Parent = par
     
+    RegisterTheme(SBF, "Button")
+
     local crS = Instance.new("UICorner")
     crS.CornerRadius = UDim.new(0, isMb and 8 or 10)
     crS.Parent = SBF
     
     local stS = Instance.new("UIStroke")
-    stS.Color = Color3.fromRGB(60, 60, 80)
     stS.Thickness = 0.8
     stS.Transparency = 0.8
     stS.Parent = SBF
     
+    RegisterTheme(stS, "Stroke")
+
     local btn = Instance.new("TextButton")
     btn.Name = txt.."SB"
     btn.Size = UDim2.new(1, 0, 1, 0)
@@ -460,19 +735,18 @@ local function crSB(txt, ord, par, clk)
     txS.Position = UDim2.new(0, 10, 0, 0)
     txS.BackgroundTransparency = 1
     txS.Text = "→ "..txt
-    txS.TextColor3 = Color3.fromRGB(200, 200, 220)
     txS.TextSize = isMb and 10 or 11
-    txS.Font = Enum.Font.Gotham
     txS.TextXAlignment = Enum.TextXAlignment.Left
     txS.Parent = SBF
     
+    RegisterTheme(txS, "SubText")
+
     btn.MouseEnter:Connect(function()
         TS:Create(SBF, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {
             BackgroundTransparency = 0.35
         }):Play()
         TS:Create(stS, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {
-            Transparency = 0.5,
-            Color = Color3.fromRGB(255, 255, 255)
+            Transparency = 0.5
         }):Play()
     end)
     
@@ -481,8 +755,7 @@ local function crSB(txt, ord, par, clk)
             BackgroundTransparency = 0.5
         }):Play()
         TS:Create(stS, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {
-            Transparency = 0.8,
-            Color = Color3.fromRGB(60, 60, 80)
+            Transparency = 0.8
         }):Play()
     end)
     
@@ -506,23 +779,25 @@ local function crESB(txt, ord, par, subs)
     local SBF = Instance.new("Frame")
     SBF.Name = txt.."CatF"
     SBF.Size = UDim2.new(1, -12, 0, isMb and 38 or 42)
-    SBF.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
     SBF.BackgroundTransparency = 0.4
     SBF.BorderSizePixel = 0
     SBF.LayoutOrder = ord
     SBF.Visible = false
     SBF.Parent = par
     
+    RegisterTheme(SBF, "Button")
+
     local crS = Instance.new("UICorner")
     crS.CornerRadius = UDim.new(0, isMb and 8 or 10)
     crS.Parent = SBF
     
     local stS = Instance.new("UIStroke")
-    stS.Color = Color3.fromRGB(80, 80, 100)
     stS.Thickness = 0.8
     stS.Transparency = 0.6
     stS.Parent = SBF
     
+    RegisterTheme(stS, "Stroke")
+
     local btn = Instance.new("TextButton")
     btn.Name = txt.."CatB"
     btn.Size = UDim2.new(1, 0, 1, 0)
@@ -536,23 +811,23 @@ local function crESB(txt, ord, par, subs)
     txS.Position = UDim2.new(0, 10, 0, 0)
     txS.BackgroundTransparency = 1
     txS.Text = "📂 "..txt
-    txS.TextColor3 = Color3.fromRGB(220, 220, 240)
     txS.TextSize = isMb and 10 or 11
-    txS.Font = Enum.Font.GothamBold
     txS.TextXAlignment = Enum.TextXAlignment.Left
     txS.Parent = SBF
     
+    RegisterTheme(txS, "Text")
+
     local arr = Instance.new("TextLabel")
     arr.Name = "arr"
     arr.Size = UDim2.new(0, 20, 0, 20)
     arr.Position = UDim2.new(1, -25, 0.5, -10)
     arr.BackgroundTransparency = 1
     arr.Text = "›"
-    arr.TextColor3 = Color3.fromRGB(180, 180, 200)
     arr.TextSize = isMb and 16 or 18
-    arr.Font = Enum.Font.GothamBold
     arr.Parent = SBF
     
+    RegisterTheme(arr, "SubText")
+
     local innerC = Instance.new("Frame")
     innerC.Name = txt.."_InnerC"
     innerC.Size = UDim2.new(1, -12, 0, 0)
@@ -614,22 +889,24 @@ local function crEB(txt, ord, clr, subs, iconId)
     local BF = Instance.new("Frame")
     BF.Name = txt.."F"
     BF.Size = UDim2.new(1, 0, 0, isMb and 36 or 42)
-    BF.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
     BF.BackgroundTransparency = 0.45
     BF.BorderSizePixel = 0
     BF.LayoutOrder = ord
     BF.Parent = SCL
     
+    RegisterTheme(BF, "Button")
+
     local crB = Instance.new("UICorner")
     crB.CornerRadius = UDim.new(0, isMb and 8 or 10)
     crB.Parent = BF
     
     local stB = Instance.new("UIStroke")
-    stB.Color = Color3.fromRGB(70, 70, 90)
     stB.Thickness = 1
     stB.Transparency = 0.75
     stB.Parent = BF
     
+    RegisterTheme(stB, "Stroke")
+
     local icn
     local grI
     
@@ -677,25 +954,25 @@ local function crEB(txt, ord, clr, subs, iconId)
     txB.Position = UDim2.new(0, isMb and 36 or 42, 0, 0)
     txB.BackgroundTransparency = 1
     txB.Text = txt
-    txB.TextColor3 = Color3.fromRGB(240, 240, 255)
     txB.TextSize = isMb and 10 or 12
-    txB.Font = Enum.Font.GothamMedium
     txB.TextXAlignment = Enum.TextXAlignment.Left
     txB.TextTruncate = Enum.TextTruncate.AtEnd
     txB.Parent = BF
     
+    RegisterTheme(txB, "Text")
+
     local arr = Instance.new("TextLabel")
     arr.Name = "arr"
     arr.Size = UDim2.new(0, 20, 0, 20)
     arr.Position = UDim2.new(1, isMb and -28 or -32, 0.5, -10)
     arr.BackgroundTransparency = 1
     arr.Text = "›"
-    arr.TextColor3 = Color3.fromRGB(180, 180, 200)
     arr.TextSize = isMb and 18 or 22
-    arr.Font = Enum.Font.GothamBold
     arr.Rotation = 0
     arr.Parent = BF
     
+    RegisterTheme(arr, "SubText")
+
     local exp = false
     local subC = Instance.new("Frame")
     subC.Name = "subC"
@@ -725,8 +1002,7 @@ local function crEB(txt, ord, clr, subs, iconId)
             BackgroundTransparency = 0.3
         }):Play()
         TS:Create(stB, TweenInfo.new(0.25, Enum.EasingStyle.Quad), {
-            Transparency = 0.4,
-            Color = Color3.fromRGB(255, 255, 255)
+            Transparency = 0.4
         }):Play()
         
         if grI then grI.Enabled = false end
@@ -745,8 +1021,7 @@ local function crEB(txt, ord, clr, subs, iconId)
             BackgroundTransparency = 0.45
         }):Play()
         TS:Create(stB, TweenInfo.new(0.25, Enum.EasingStyle.Quad), {
-            Transparency = 0.75,
-            Color = Color3.fromRGB(70, 70, 90)
+            Transparency = 0.75
         }):Play()
         
         if grI then grI.Enabled = true end
@@ -760,7 +1035,12 @@ local function crEB(txt, ord, clr, subs, iconId)
         }):Play()
     end)
     
+    local animDebounce = false
+
     btn.MouseButton1Click:Connect(function()
+        if animDebounce then return end -- Previene clics rápidos durante la transición
+        animDebounce = true
+        
         exp = not exp
         
         TS:Create(arr, TweenInfo.new(0.3, Enum.EasingStyle.Quad), {
@@ -782,24 +1062,27 @@ local function crEB(txt, ord, clr, subs, iconId)
             tw:Play()
             tw.Completed:Connect(function()
                 if exp then subC.AutomaticSize = Enum.AutomaticSize.Y end
+                animDebounce = false
             end)
             
-            adLg("EXPANDED: "..txt, "info")
         else
             subC.AutomaticSize = Enum.AutomaticSize.None
             subC.Size = UDim2.new(1, 0, 0, subC.AbsoluteSize.Y)
-            TS:Create(subC, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+            local tw = TS:Create(subC, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
                 Size = UDim2.new(1, 0, 0, 0)
-            }):Play()
+            })
+            tw:Play()
             
-            task.wait(0.3)
-            for _, c in ipairs(subC:GetChildren()) do
-                if c:IsA("Frame") then
-                    c.Visible = false
+            tw.Completed:Connect(function()
+                if not exp then -- Doble verificación
+                    for _, c in ipairs(subC:GetChildren()) do
+                        if c:IsA("Frame") then
+                            c.Visible = false
+                        end
+                    end
                 end
-            end
-            
-            adLg("COLLAPSED: "..txt, "info")
+                animDebounce = false
+            end)
         end
     end)
 end
@@ -930,6 +1213,11 @@ function AntiRollback:stop()
         self.nuclearConnection:Disconnect()
         self.nuclearConnection = nil
     end
+
+    if self.returnConnection then
+        self.returnConnection:Disconnect()
+        self.returnConnection = nil
+    end
     
     task.wait(0.1) 
     
@@ -1013,6 +1301,12 @@ local function getClosestMerchant()
                 if (npc:IsA("Model") or npc:IsA("BasePart")) then
                     if string.find(npc.Name, "Merchant") or string.find(npc.Name, "Sell") or npc.Name == "Merchant" then
                         local targetCF = npc:GetPivot()
+                        
+                        -- CORRECCIÓN DE POSICIÓN: TP ENFRENTE Y ARRIBA
+                        -- LookVector * 4: 4 studs enfrente
+                        -- UpVector * 6: 6 studs arriba (más alto para asegurar que no quede enterrado)
+                        targetCF = targetCF + (targetCF.LookVector * 4) + Vector3.new(0, 6, 0)
+                        
                         local dist = (myPos - targetCF.Position).Magnitude
                         
                         if dist < minDst then
@@ -1029,7 +1323,11 @@ local function getClosestMerchant()
         return closestCF
     else
         local starter = workspace.NPCs:FindFirstChild("StarterTown") and workspace.NPCs.StarterTown:FindFirstChild("Merchant")
-        if starter then return starter:GetPivot() end
+        if starter then 
+            -- Corrección también para el backup
+            local cf = starter:GetPivot()
+            return cf + (cf.LookVector * 4) + Vector3.new(0, 6, 0)
+        end
     end
     
     return nil
@@ -1122,30 +1420,62 @@ local function performSellAction(actionCallback)
     local returnAttempts = 0
     local returned = false
     
+    -- FORCE RETURN LOGIC MEJORADA
+    local startTime = tick()
+    
+    AntiRollback.returnConnection = RunService.Heartbeat:Connect(function()
+        if not LP.Character or not LP.Character:FindFirstChild("HumanoidRootPart") then return end
+        local h = LP.Character.HumanoidRootPart
+        
+        -- Forzar posición constantemente
+        h.CFrame = startPos
+        h.Velocity = Vector3.zero
+        h.AssemblyLinearVelocity = Vector3.zero
+        
+        -- Verificar si ya llegamos y estamos estables
+        local dist = (h.Position - startPos.Position).Magnitude
+        if dist < 2 then
+             -- Mantener un poco más para asegurar que el servidor lo registre
+        end
+    end)
+    
     repeat
         returnAttempts = returnAttempts + 1
-        
-        bypassTP(startPos) 
-        hrp.Velocity = Vector3.zero
-        hrp.Anchored = true
         task.wait(0.2)
-        hrp.Anchored = false
         
-        task.wait(0.3)
-        
-        local distReturn = (hrp.Position - startPos.Position).Magnitude
-        if distReturn < 10 then
-            returned = true
-        else
-            adLg("RETURN GLITCHED - RETRYING ("..returnAttempts..")", "warning")
+        local h = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+        if h then
+            local distReturn = (h.Position - startPos.Position).Magnitude
+            if distReturn < 5 then
+                -- Esperar un momento para confirmar estabilidad
+                task.wait(0.5)
+                if (h.Position - startPos.Position).Magnitude < 5 then
+                    returned = true
+                end
+            end
         end
         
-    until returned or returnAttempts >= 5
+        -- Si tarda mucho, intentar re-forzar nuclearmente
+        if returnAttempts % 10 == 0 then
+             bypassTP(startPos)
+        end
+        
+    until returned or returnAttempts >= 20 -- 4 segundos aprox de intentos fuertes
+    
+    if AntiRollback.returnConnection then
+        AntiRollback.returnConnection:Disconnect()
+        AntiRollback.returnConnection = nil
+    end
+    
+    hrp.Anchored = false
+    hrp.Velocity = Vector3.zero
     
     if returned then
          adLg("RETURNED SAFELY", "info")
     else
-         adLg("RETURN FAILED - MANUALLY WALK BACK", "error")
+         adLg("RETURN FAILED - TELEPORTING FORCEFULLY", "error")
+         -- Último intento desesperado
+         hrp.CFrame = startPos
     end
 end
 
@@ -1195,7 +1525,7 @@ local function stAF()
                                 stuckTime = tick()
                             end
                             
-                            if tick() - stuckTime > 4 then
+                            if tick() - stuckTime > 2 then
                                 adLg("STUCK COLLECTING (NO FILL)", "warning")
                                 break
                             end
@@ -1322,26 +1652,153 @@ crEB("Auto", 1, Color3.fromRGB(100, 150, 255), {
     }
 }, "10884449082")
 
-crEB("Speed", 2, Color3.fromRGB(150, 100, 255), {
+-- Variable Global para Tecla de Fly (Default: F)
+_G.FlyKey = Enum.KeyCode.F
+_G.FlyActive = false
+
+-- Función Centralizada de Toggle Fly
+local function toggleFly()
+    if _G.FlyActive then
+        _G.FlyActive = false
+        adLg("FLY: OFF", "info")
+        
+        local char = LP.Character
+        if char and char:FindFirstChild("HumanoidRootPart") then
+            local root = char.HumanoidRootPart
+            if root:FindFirstChild("FlyMover") then root.FlyMover:Destroy() end
+            if root:FindFirstChild("FlyRotator") then root.FlyRotator:Destroy() end
+            if char:FindFirstChild("Humanoid") then
+                char.Humanoid.PlatformStand = false
+                char.Humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+            end
+        end
+    else
+        _G.FlyActive = true
+        adLg("FLY: ON", "success")
+        
+        local char = LP.Character
+        if not char then return end
+        local root = char:WaitForChild("HumanoidRootPart")
+        local hum = char:WaitForChild("Humanoid")
+        local UserInputService = game:GetService("UserInputService")
+        local RunService = game:GetService("RunService")
+        
+        local flySpeed = 50
+        
+        local bv = Instance.new("BodyVelocity")
+        bv.Name = "FlyMover"
+        bv.Parent = root
+        bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+        bv.Velocity = Vector3.new(0,0,0)
+        
+        local bg = Instance.new("BodyGyro")
+        bg.Name = "FlyRotator"
+        bg.Parent = root
+        bg.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+        bg.P = 10000
+        bg.D = 100
+        
+        task.spawn(function()
+            while _G.FlyActive and char.Parent do
+                -- Ya no necesitamos chequear la tecla aquí dentro para salir
+                
+                -- Bypass Trust Score
+                char:SetAttribute("KM_TELEPORT_TRUST_SCORE", 100)
+                char:SetAttribute("KM_SPEED_TRUST_SCORE", 100)
+                
+                -- Movimiento Cámara
+                local cam = workspace.CurrentCamera
+                local look = cam.CFrame.LookVector
+                local right = cam.CFrame.RightVector
+                local moveDir = Vector3.new(0,0,0)
+                
+                if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveDir = moveDir + look end
+                if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveDir = moveDir - look end
+                if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveDir = moveDir - right end
+                if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveDir = moveDir + right end
+                if UserInputService:IsKeyDown(Enum.KeyCode.E) then moveDir = moveDir + Vector3.new(0,1,0) end
+                if UserInputService:IsKeyDown(Enum.KeyCode.Q) then moveDir = moveDir - Vector3.new(0,1,0) end
+                
+                local currentSpeed = flySpeed
+                if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then currentSpeed = flySpeed * 3 end
+                
+                bg.CFrame = cam.CFrame
+                bv.Velocity = moveDir * currentSpeed
+                
+                if hum then 
+                    hum.PlatformStand = true 
+                    hum:ChangeState(Enum.HumanoidStateType.Physics)
+                end
+                
+                RunService.Heartbeat:Wait()
+            end
+            
+            -- Cleanup al salir del loop
+            if root:FindFirstChild("FlyMover") then root.FlyMover:Destroy() end
+            if root:FindFirstChild("FlyRotator") then root.FlyRotator:Destroy() end
+            if hum then
+                hum.PlatformStand = false
+                hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+            end
+        end)
+    end
+end
+
+-- Listener Global de Teclas (Toggle ON/OFF)
+if _G.FlyKeyConnection then _G.FlyKeyConnection:Disconnect() end
+_G.FlyKeyConnection = game:GetService("UserInputService").InputBegan:Connect(function(input, gameProcessed)
+    if not gameProcessed and input.KeyCode == _G.FlyKey then
+        toggleFly()
+    end
+end)
+
+crEB("Misc", 2, Color3.fromRGB(150, 100, 255), {
     {
-        text = "Speed x1.5",
+        text = "Speed Hack (Toggle)",
         onClick = function()
-            LP.Character.Humanoid.WalkSpeed = 24
-            adLg("SPEED: 1.5x", "success")
+            if _G.SpeedHackActive then
+                _G.SpeedHackActive = false
+                if _G.SpeedLoop then _G.SpeedLoop:Disconnect() end
+                if LP.Character then
+                    LP.Character:SetAttribute("BaseWalkSpeed", 16)
+                    if LP.Character:FindFirstChild("Humanoid") then LP.Character.Humanoid.WalkSpeed = 16 end
+                end
+                adLg("SPEED: OFF (Legit)", "info")
+            else
+                _G.SpeedHackActive = true
+                adLg("SPEED: ON (Bypass)", "success")
+                local RunService = game:GetService("RunService")
+                _G.SpeedLoop = RunService.Heartbeat:Connect(function()
+                    if not _G.SpeedHackActive then return end
+                    local char = LP.Character
+                    if char then
+                        -- Bypass Method: BaseWalkSpeed Attribute
+                        if char:GetAttribute("BaseWalkSpeed") ~= 80 then
+                            char:SetAttribute("BaseWalkSpeed", 80)
+                        end
+                        if char:FindFirstChild("Humanoid") and char.Humanoid.WalkSpeed < 50 then
+                            char.Humanoid.WalkSpeed = 80
+                        end
+                    end
+                end)
+            end
         end
     },
     {
-        text = "Speed x2",
+        text = "Fly Mode (Toggle)",
         onClick = function()
-            LP.Character.Humanoid.WalkSpeed = 32
-            adLg("SPEED: 2x", "success")
+            toggleFly()
         end
     },
     {
-        text = "Reset Speed",
+        text = "Set Fly Keybind (PC)",
         onClick = function()
-            LP.Character.Humanoid.WalkSpeed = 16
-            adLg("SPEED RESET", "info")
+            adLg("PRESS ANY KEY NOW...", "warning")
+            local input = game:GetService("UserInputService").InputBegan:Wait()
+            if input.KeyCode ~= Enum.KeyCode.Unknown then
+                _G.FlyKey = input.KeyCode
+                adLg("FLY KEY SET TO: " .. input.KeyCode.Name, "success")
+            end
         end
     }
 }, "92660651692951")
@@ -1462,12 +1919,88 @@ StoreUI.Name = "StoreUI"
 StoreUI.Size = UDim2.new(0, isMb and 300 or 400, 0, isMb and 250 or 300)
 StoreUI.Position = UDim2.new(0.5, isMb and -150 or -200, 0.5, isMb and -125 or -150)
 StoreUI.BackgroundColor3 = Color3.fromRGB(20, 20, 28)
+StoreUI.BackgroundTransparency = 1 -- Transparente para ver imagen
 StoreUI.BorderSizePixel = 0
 StoreUI.Visible = false
 StoreUI.ClipsDescendants = true
 StoreUI.Parent = SG
-StoreUI.Active = true
-StoreUI.Draggable = true
+-- StoreUI.Active = true -- Quitamos Active del padre para que el script de drag funcione mejor si usamos input manual, o lo dejamos y usamos input custom
+-- StoreUI.Draggable = true -- REMOVIDO: Usaremos sistema custom "Drag Anywhere"
+
+-- Custom Background Image
+local storeBG = Instance.new("ImageLabel")
+storeBG.Name = "StoreBG"
+storeBG.Image = "rbxassetid://94639788970365"
+storeBG.Size = UDim2.new(1, 0, 1, 0)
+storeBG.BackgroundTransparency = 1
+storeBG.ImageTransparency = 0.8 -- Más transparente para que no sea tan brillante
+storeBG.ScaleType = Enum.ScaleType.Crop
+storeBG.ZIndex = 0
+storeBG.Parent = StoreUI
+
+-- Corner para la imagen
+local bgCorner = Instance.new("UICorner")
+bgCorner.CornerRadius = UDim.new(0, 12)
+bgCorner.Parent = storeBG
+
+-- Overlay para mantener el tema oscuro (Tint)
+local storeOverlay = Instance.new("Frame")
+storeOverlay.Name = "Overlay"
+storeOverlay.Size = UDim2.new(1, 0, 1, 0)
+storeOverlay.BackgroundTransparency = 0.3 -- Ajustable
+storeOverlay.ZIndex = 0
+storeOverlay.Parent = StoreUI
+
+-- Corner para el overlay
+local ovCorner = Instance.new("UICorner")
+ovCorner.CornerRadius = UDim.new(0, 12)
+ovCorner.Parent = storeOverlay
+
+-- Registramos el Overlay para que tome el color del tema DarkBg
+RegisterTheme(storeOverlay, "DarkBg")
+
+-- Función de arrastre "Drag Anywhere"
+local function enableDrag(frame)
+    local dragToggle = nil
+    local dragSpeed = 0
+    local dragInput = nil
+    local dragStart = nil
+    local dragPos = nil
+    
+    local function updateInput(input)
+        local delta = input.Position - dragStart
+        local position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        game:GetService("TweenService"):Create(frame, TweenInfo.new(0.1), {Position = position}):Play()
+    end
+    
+    frame.InputBegan:Connect(function(input)
+        if (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) and UIS:GetFocusedTextBox() == nil then
+            dragToggle = true
+            dragStart = input.Position
+            startPos = frame.Position
+            
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragToggle = false
+                end
+            end)
+        end
+    end)
+    
+    frame.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
+    
+    UIS.InputChanged:Connect(function(input)
+        if input == dragInput and dragToggle then
+            updateInput(input)
+        end
+    end)
+end
+
+enableDrag(StoreUI)
 
 local uiCorner = Instance.new("UICorner")
 uiCorner.CornerRadius = UDim.new(0, 12)
@@ -1478,6 +2011,8 @@ uiStroke.Color = Color3.fromRGB(60, 60, 80)
 uiStroke.Thickness = 1.5
 uiStroke.Parent = StoreUI
 
+RegisterTheme(uiStroke, "Stroke")
+
 local storeTitle = Instance.new("TextLabel")
 storeTitle.Size = UDim2.new(1, 0, 0, 30)
 storeTitle.BackgroundTransparency = 1
@@ -1486,6 +2021,8 @@ storeTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
 storeTitle.Font = Enum.Font.GothamBold
 storeTitle.TextSize = 14
 storeTitle.Parent = StoreUI
+
+RegisterTheme(storeTitle, "Text")
 
 local closeStore = Instance.new("TextButton")
 closeStore.Size = UDim2.new(0, 24, 0, 24)
@@ -1500,16 +2037,24 @@ closeStore.MouseButton1Click:Connect(function()
     StoreUI.Visible = false
 end)
 
-local tabsCont = Instance.new("Frame")
+local tabsCont = Instance.new("ScrollingFrame")
 tabsCont.Size = UDim2.new(1, -16, 0, 30)
 tabsCont.Position = UDim2.new(0, 8, 0, 35)
 tabsCont.BackgroundTransparency = 1
+tabsCont.BorderSizePixel = 0
+tabsCont.ScrollBarThickness = 2
+tabsCont.ScrollingDirection = Enum.ScrollingDirection.X
+tabsCont.AutomaticCanvasSize = Enum.AutomaticSize.X
+tabsCont.CanvasSize = UDim2.new(0, 0, 0, 0)
 tabsCont.Parent = StoreUI
+
+RegisterTheme(tabsCont, "ScrollBar")
 
 local tabLayout = Instance.new("UIListLayout")
 tabLayout.FillDirection = Enum.FillDirection.Horizontal
 tabLayout.Padding = UDim.new(0, 5)
-tabLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+tabLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+tabLayout.SortOrder = Enum.SortOrder.LayoutOrder
 tabLayout.Parent = tabsCont
 
 local itemsScroll = Instance.new("ScrollingFrame")
@@ -1519,6 +2064,8 @@ itemsScroll.BackgroundTransparency = 1
 itemsScroll.ScrollBarThickness = 4
 itemsScroll.BorderSizePixel = 0
 itemsScroll.Parent = StoreUI
+
+RegisterTheme(itemsScroll, "ScrollBar")
 
 local itemsLayout = Instance.new("UIListLayout")
 itemsLayout.Padding = UDim.new(0, 5)
@@ -1534,10 +2081,15 @@ local function clearItems()
     end
 end
 
-local function createItemBtn(name, isPotion)
+local function createItemBtn(name, price, isPotion)
+    local thm = Themes[CurrentSettings.Theme] or Themes.Dark
+    local fnt = Fonts[CurrentSettings.Font] or Fonts.Modern
+
     local itemFr = Instance.new("Frame")
     itemFr.Size = UDim2.new(1, -4, 0, 36)
-    itemFr.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+    -- Color de fondo del item: Un poco más claro que el fondo oscuro principal
+    local r, g, b = thm.MainBg.R, thm.MainBg.G, thm.MainBg.B
+    itemFr.BackgroundColor3 = Color3.new(r * 0.5, g * 0.5, b * 0.5)
     itemFr.BorderSizePixel = 0
     itemFr.Parent = itemsScroll
     
@@ -1546,23 +2098,38 @@ local function createItemBtn(name, isPotion)
     ic.Parent = itemFr
     
     local nm = Instance.new("TextLabel")
-    nm.Size = UDim2.new(0.6, 0, 1, 0)
+    nm.Size = UDim2.new(0.5, 0, 1, 0) -- Reducimos ancho para dar espacio a botones
     nm.Position = UDim2.new(0, 8, 0, 0)
     nm.BackgroundTransparency = 1
     nm.Text = name
-    nm.TextColor3 = Color3.fromRGB(220, 220, 220)
+    nm.TextColor3 = thm.Text
     nm.TextXAlignment = Enum.TextXAlignment.Left
-    nm.Font = Enum.Font.GothamMedium
+    nm.Font = fnt.Header
     nm.TextSize = 12
     nm.Parent = itemFr
+
+    local prL = Instance.new("TextLabel")
+    prL.Size = UDim2.new(0, 50, 1, 0)
+    prL.Position = UDim2.new(0.5, 5, 0, 0) -- Ajustado
+    prL.BackgroundTransparency = 1
+    prL.Text = "$" .. tostring(price)
+    prL.TextColor3 = Color3.fromRGB(255, 215, 0) -- Precio en dorado siempre destaca bien
+    prL.Font = fnt.Body
+    prL.TextSize = 11
+    prL.TextXAlignment = Enum.TextXAlignment.Left
+    prL.Parent = itemFr
     
+    -- Contenedor derecho para alinear botones
+    local rightOffset = -4
+    
+    -- Botón Comprar
     local buyBtn = Instance.new("TextButton")
-    buyBtn.Size = UDim2.new(0, 50, 0, 24)
-    buyBtn.Position = UDim2.new(1, -58, 0.5, -12)
+    buyBtn.Size = UDim2.new(0, 40, 0, 24)
+    buyBtn.Position = UDim2.new(1, rightOffset - 40, 0.5, -12)
     buyBtn.BackgroundColor3 = Color3.fromRGB(50, 205, 50)
     buyBtn.Text = "BUY"
     buyBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    buyBtn.Font = Enum.Font.GothamBold
+    buyBtn.Font = fnt.Header
     buyBtn.TextSize = 10
     buyBtn.Parent = itemFr
     
@@ -1570,15 +2137,17 @@ local function createItemBtn(name, isPotion)
     bC.CornerRadius = UDim.new(0, 4)
     bC.Parent = buyBtn
     
+    rightOffset = rightOffset - 45 -- Espacio para el siguiente elemento
+    
     local qtyInput
     if isPotion then
         qtyInput = Instance.new("TextBox")
-        qtyInput.Size = UDim2.new(0, 30, 0, 24)
-        qtyInput.Position = UDim2.new(1, -95, 0.5, -12)
+        qtyInput.Size = UDim2.new(0, 25, 0, 24)
+        qtyInput.Position = UDim2.new(1, rightOffset - 25, 0.5, -12)
         qtyInput.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
         qtyInput.Text = "1"
         qtyInput.TextColor3 = Color3.fromRGB(255, 255, 255)
-        qtyInput.Font = Enum.Font.Gotham
+        qtyInput.Font = fnt.Body
         qtyInput.TextSize = 12
         qtyInput.Parent = itemFr
         
@@ -1593,7 +2162,222 @@ local function createItemBtn(name, isPotion)
             if n > 32 then n = 32 end
             qtyInput.Text = tostring(n)
         end)
+        
+        rightOffset = rightOffset - 30 -- Espacio tras el input
     end
+    
+    -- Botón VIEW
+    local viewBtn = Instance.new("TextButton")
+    viewBtn.Size = UDim2.new(0, 40, 0, 24)
+    viewBtn.Position = UDim2.new(1, rightOffset - 40, 0.5, -12)
+    viewBtn.BackgroundColor3 = Color3.fromRGB(60, 100, 200) -- Azul para diferenciar
+    viewBtn.Text = "VIEW"
+    viewBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    viewBtn.Font = fnt.Header
+    viewBtn.TextSize = 10
+    viewBtn.Parent = itemFr
+    
+    local vC = Instance.new("UICorner")
+    vC.CornerRadius = UDim.new(0, 4)
+    vC.Parent = viewBtn
+    
+    -- Lógica del botón View
+    local viewing = false
+    local lastCamCF = nil
+    
+    viewBtn.MouseButton1Click:Connect(function()
+        -- Función de búsqueda robusta
+        local function findTargetItem(targetName)
+            local searchRoots = {workspace:FindFirstChild("Purchasable"), workspace:FindFirstChild("Shop"), workspace}
+            
+            -- Normalizar nombre buscado (quitar espacios, minúsculas)
+            local cleanTarget = targetName:lower():gsub(" ", "")
+            local rawTarget = targetName:lower()
+            
+            for _, root in pairs(searchRoots) do
+                if root then
+                    -- 1. Búsqueda directa y transformaciones simples en hijos
+                    for _, child in ipairs(root:GetChildren()) do
+                        local childName = child.Name:lower()
+                        local childClean = childName:gsub(" ", "")
+                        
+                        -- Coincidencia exacta, sin espacios, o contenida
+                        if childName == rawTarget or childClean == cleanTarget or childClean == cleanTarget .. "s" then
+                            return child
+                        end
+                        
+                        -- Coincidencia parcial inversa (ej: "Potion" busca en "BasicPotion")
+                        if childName:find(cleanTarget) or cleanTarget:find(childName) then
+                             -- Verificar si parece un item (tiene ShopItem o Precio)
+                             if child:FindFirstChild("ShopItem") or child:FindFirstChild("Price") then
+                                 return child
+                             end
+                        end
+                    end
+                    
+                    -- 2. Búsqueda profunda de modelos con "ShopItem" (Más costosa pero efectiva)
+                    if root == workspace then -- Solo hacer deep scan en workspace si falló lo anterior
+                        for _, desc in ipairs(root:GetDescendants()) do
+                            if desc:IsA("Model") and (desc:FindFirstChild("ShopItem") or desc:FindFirstChild("ShardPrice")) then
+                                local dName = desc.Name:lower():gsub(" ", "")
+                                if dName == cleanTarget or dName:find(cleanTarget) then
+                                    return desc
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+            return nil
+        end
+
+        local targetItem = findTargetItem(name)
+        
+        if not targetItem then
+            -- Debug info para el usuario (F9 Console)
+            print("--- DEBUG VIEW ---")
+            print("Searching for:", name)
+            local p = workspace:FindFirstChild("Purchasable")
+            if p then
+                print("Items found in Purchasable:")
+                for _, c in ipairs(p:GetChildren()) do
+                    print("-", c.Name)
+                end
+            else
+                print("Workspace.Purchasable NOT FOUND")
+            end
+            print("------------------")
+            
+            adLg("Item '" .. name .. "' not found! Check F9 console.", "error")
+            return 
+        end
+        
+        -- Validación extra: Verificar si está en el Workspace actual (Mapa visible)
+        if not targetItem:IsDescendantOf(workspace) then
+             adLg("Error: Cannot spectate. Item is not in the current map.", "error")
+             return
+        end
+        
+        local cam = workspace.CurrentCamera
+        
+        if not viewing then
+            -- ACTIVAR VIEW
+            viewing = true
+            viewBtn.Text = "EXIT"
+            viewBtn.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
+            
+            -- Guardar posición original
+            lastCamCF = cam.CFrame
+            cam.CameraType = Enum.CameraType.Scriptable
+            
+            -- Calcular bounding box y centro
+            local cf, size
+            if targetItem:IsA("Model") then
+                cf, size = targetItem:GetBoundingBox()
+            else
+                cf = targetItem.CFrame
+                size = targetItem.Size
+            end
+            
+            -- === EFECTOS VISUALES (ESP/CHAMS) ===
+            local highlight = Instance.new("Highlight")
+            highlight.Name = "ViewHighlight"
+            highlight.Adornee = targetItem
+            highlight.FillColor = Color3.new(1, 1, 1) -- Blanco
+            highlight.OutlineColor = Color3.new(1, 1, 1) -- Blanco
+            highlight.FillTransparency = 0.75 -- Sutil para ver textura
+            highlight.OutlineTransparency = 0.1
+            highlight.Parent = targetItem
+            
+            local bbGui = Instance.new("BillboardGui")
+            bbGui.Name = "ViewInfo"
+            bbGui.Adornee = targetItem
+            bbGui.Size = UDim2.new(0, 200, 0, 50)
+            bbGui.StudsOffset = Vector3.new(0, math.max(size.Y, 3) + 2, 0)
+            bbGui.AlwaysOnTop = true
+            bbGui.Parent = targetItem
+            
+            local infoLabel = Instance.new("TextLabel")
+            infoLabel.Size = UDim2.new(1, 0, 1, 0)
+            infoLabel.BackgroundTransparency = 1
+            infoLabel.TextColor3 = Color3.new(1, 1, 1)
+            infoLabel.TextStrokeTransparency = 0
+            infoLabel.Font = Enum.Font.GothamBold
+            infoLabel.TextSize = 14
+            infoLabel.Text = name
+            infoLabel.Parent = bbGui
+            -- ====================================
+            
+            -- Configuración de órbita
+            local centerPos = cf.Position
+            local radius = math.max(size.X, size.Y, size.Z) * 1.8 + 5 
+            local heightOffset = math.max(size.Y, 2) * 0.5
+            local angle = 0
+            
+            -- Conexión de rotación y actualización de info
+            local rotConnection
+            rotConnection = game:GetService("RunService").RenderStepped:Connect(function(dt)
+                if not viewing or not viewBtn.Parent then 
+                    if rotConnection then rotConnection:Disconnect() end
+                    -- Limpieza de emergencia
+                    if highlight then highlight:Destroy() end
+                    if bbGui then bbGui:Destroy() end
+                    return
+                end
+                
+                angle = angle + dt * 0.8
+                
+                -- Calcular posición orbital
+                local offsetX = math.cos(angle) * radius
+                local offsetZ = math.sin(angle) * radius
+                local camPos = centerPos + Vector3.new(offsetX, heightOffset, offsetZ)
+                
+                -- Suavizar movimiento de cámara
+                local newCF = CFrame.new(camPos, centerPos)
+                cam.CFrame = cam.CFrame:Lerp(newCF, 0.1)
+                
+                -- Actualizar distancia en el texto
+                local plr = game.Players.LocalPlayer
+                if plr and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+                    local dist = (plr.Character.HumanoidRootPart.Position - centerPos).Magnitude
+                    infoLabel.Text = string.format("%s\n[ %.1f studs ]", name, dist)
+                end
+            end)
+            
+            viewBtn:SetAttribute("RotationActive", true)
+            viewBtn.MouseButton1Click:Connect(function()
+                 if rotConnection then rotConnection:Disconnect() end
+                 -- Limpiar efectos al hacer click para salir
+                 if highlight then highlight:Destroy() end
+                 if bbGui then bbGui:Destroy() end
+            end)
+            
+            adLg("Viewing '" .. name .. "'. Click again to exit.", "info")
+        else
+            -- SALIR DE VIEW
+            viewing = false
+            viewBtn.Text = "VIEW"
+            viewBtn.BackgroundColor3 = Color3.fromRGB(60, 100, 200)
+            
+            -- Asegurar limpieza (por si acaso)
+            local oldH = targetItem:FindFirstChild("ViewHighlight")
+            if oldH then oldH:Destroy() end
+            local oldB = targetItem:FindFirstChild("ViewInfo")
+            if oldB then oldB:Destroy() end
+            
+            if lastCamCF then
+                local tween = game:GetService("TweenService"):Create(cam, TweenInfo.new(0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {CFrame = lastCamCF})
+                tween:Play()
+                tween.Completed:Connect(function()
+                    if not viewing then
+                        cam.CameraType = Enum.CameraType.Custom
+                    end
+                end)
+            else
+                 cam.CameraType = Enum.CameraType.Custom
+            end
+        end
+    end)
     
     buyBtn.MouseButton1Click:Connect(function()
         local q = 1
@@ -1606,37 +2390,115 @@ end
 
 local categories = {
     Potions = {
-        "Basic Capacity Potion", "Greater Capacity Potion", 
-        "Basic Luck Potion", "Greater Luck Potion", "Merchant's Potion"
+        {Name = "Basic Capacity Potion", Price = '40k'},
+        {Name = "Greater Capacity Potion", Price = '20 S'},
+        {Name = "Basic Luck Potion", Price = '50k'},
+        {Name = "Greater Luck Potion", Price = '30 S'},
+        {Name = "Merchant's Potion", Price = '200 S'},
+        {Name = "Blitz Potion", Price = '0'},
+        {Name = "Instability Potion", Price = '0'},
+        {Name = "Quake Potion", Price = '0'}
     },
     Pans = {
-        "Diamond Pan", "Golden Pan", "Magnetic Pan", "Meteoric Pan"
+        {Name = "Diamond Pan", Price = '10M'},
+        {Name = "Golden Pan", Price = '300k'},
+        {Name = "Magnetic Pan", Price = '1M'},
+        {Name = "Meteoric Pan", Price = '3,5M'}
     },
     Shovels = {
-        "Diamond Shovel", "Golden Shovel", "Meteoric Shovel"
+        {Name = "Diamond Shovel", Price = '12M'},
+        {Name = "Golden Shovel", Price = '1,33M'},
+        {Name = "Meteoric Shovel", Price = '4M'},
+        {Name = "The Excavator", Price = '320k'}
     },
-    Totems = {
-        "Luck Totem", "Strength Totem"
+    Other = {
+        {Name = "Cosmic Resonator", Price = '0'},
+        {Name = "Titanic Enchant Book", Price = '0'},
+        {Name = "Traveler's Backpack", Price = '0'}
+    },
+    Sluices = {
+        -- Aquí irán los Sluices
     }
 }
+
+local function formatNumber(n)
+    if not tonumber(n) then return n end
+    n = tonumber(n)
+    if n >= 1e21 then return string.format("%.1f Sx", n/1e21) end
+    if n >= 1e18 then return string.format("%.1f Qi", n/1e18) end
+    if n >= 1e15 then return string.format("%.1f Qa", n/1e15) end
+    if n >= 1e12 then return string.format("%.1f T", n/1e12) end
+    if n >= 1e9 then return string.format("%.1f B", n/1e9) end
+    if n >= 1e6 then return string.format("%.1f M", n/1e6) end
+    if n >= 1e3 then return string.format("%.1f k", n/1e3) end
+    return tostring(n)
+end
+
+local function getItemPrice(name)
+    local purchasable = workspace:FindFirstChild("Purchasable")
+    if not purchasable then return nil end
+    
+    local item = purchasable:FindFirstChild(name)
+    if not item then return nil end
+    
+    local shopItem = item:FindFirstChild("ShopItem")
+    if not shopItem then return nil end
+    
+    -- Revisar si tiene precio en Shards
+    local shardPriceObj = shopItem:FindFirstChild("ShardPrice")
+    if shardPriceObj then
+        if shardPriceObj:IsA("IntValue") or shardPriceObj:IsA("NumberValue") then
+            return formatNumber(shardPriceObj.Value) .. " S"
+        elseif shardPriceObj:IsA("StringValue") then
+            return shardPriceObj.Value .. " S"
+        end
+    end
+    
+    local attrShard = shopItem:GetAttribute("ShardPrice")
+    if attrShard then
+        return formatNumber(attrShard) .. " S"
+    end
+    
+    -- Revisar precio normal
+    local priceObj = shopItem:FindFirstChild("Price")
+    if priceObj then
+        if priceObj:IsA("IntValue") or priceObj:IsA("NumberValue") then
+            return formatNumber(priceObj.Value)
+        elseif priceObj:IsA("StringValue") then
+            return priceObj.Value
+        end
+    end
+    
+    local attrPrice = shopItem:GetAttribute("Price")
+    if attrPrice then
+        return formatNumber(attrPrice)
+    end
+    
+    return nil
+end
 
 local function loadTab(tabName)
     clearItems()
     currentTab = tabName
     local items = categories[tabName] or {}
     for _, it in ipairs(items) do
-        createItemBtn(it, tabName == "Potions")
+        local realPrice = getItemPrice(it.Name)
+        createItemBtn(it.Name, realPrice or it.Price, tabName == "Potions")
     end
 end
 
-local function createTabBtn(name)
+local function createTabBtn(name, order)
+    local thm = Themes[CurrentSettings.Theme] or Themes.Dark
+    local fnt = Fonts[CurrentSettings.Font] or Fonts.Modern
+
     local btn = Instance.new("TextButton")
     btn.Size = UDim2.new(0, 80, 1, 0)
-    btn.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+    btn.BackgroundColor3 = thm.Button
     btn.Text = name
-    btn.TextColor3 = Color3.fromRGB(200, 200, 200)
-    btn.Font = Enum.Font.GothamBold
+    btn.TextColor3 = thm.SubText
+    btn.Font = fnt.Header
     btn.TextSize = 11
+    btn.LayoutOrder = order or 0
     btn.Parent = tabsCont
     
     local c = Instance.new("UICorner")
@@ -1644,36 +2506,86 @@ local function createTabBtn(name)
     c.Parent = btn
     
     btn.MouseButton1Click:Connect(function()
+        local cThm = Themes[CurrentSettings.Theme] or Themes.Dark
         for _, b in ipairs(tabsCont:GetChildren()) do
             if b:IsA("TextButton") then
-                b.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
-                b.TextColor3 = Color3.fromRGB(200, 200, 200)
+                b.BackgroundColor3 = cThm.Button
+                b.TextColor3 = cThm.SubText
             end
         end
-        btn.BackgroundColor3 = Color3.fromRGB(60, 100, 200)
-        btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        btn.BackgroundColor3 = cThm.Accent
+        btn.TextColor3 = cThm.Text -- Texto destacado para activo
         loadTab(name)
     end)
     
     return btn
 end
 
-local t1 = createTabBtn("Pans")
-local t2 = createTabBtn("Shovels")
-local t3 = createTabBtn("Potions")
-local t4 = createTabBtn("Totems")
+local t1 = createTabBtn("Pans", 1)
+local t2 = createTabBtn("Shovels", 2)
+local t3 = createTabBtn("Potions", 3)
+local t5 = createTabBtn("Other", 5)
+local t6 = createTabBtn("Sluices", 6)
 
+-- Inicializar pestaña activa con colores del tema
 loadTab("Pans")
-t1.BackgroundColor3 = Color3.fromRGB(60, 100, 200)
+local thmInit = Themes[CurrentSettings.Theme] or Themes.Dark
+t1.BackgroundColor3 = thmInit.Accent
+t1.TextColor3 = thmInit.Text
 
 crEB("Open Store", 4, Color3.fromRGB(50, 205, 50), {
     {
         text = "Open Marketplace",
         onClick = function()
             StoreUI.Visible = not StoreUI.Visible
+            -- Recargar items al abrir para asegurar precios y tema actualizados
+            if StoreUI.Visible then
+                loadTab(currentTab)
+            end
         end
     }
-}, "121468959425923")
+}, "76035829356840")
+
+-- ============================================
+-- [ SETTINGS MENU ]
+-- ============================================
+
+local themeSubs = {}
+for name, _ in pairs(Themes) do
+    table.insert(themeSubs, {
+        text = name,
+        onClick = function()
+            CurrentSettings.Theme = name
+            UpdateAllThemes()
+            SaveSettings()
+            adLg("THEME: "..name, "info")
+        end
+    })
+end
+
+local fontSubs = {}
+for name, _ in pairs(Fonts) do
+    table.insert(fontSubs, {
+        text = name,
+        onClick = function()
+            CurrentSettings.Font = name
+            UpdateAllThemes()
+            SaveSettings()
+            adLg("FONT: "..name, "info")
+        end
+    })
+end
+
+crEB("AJUSTES", 10, Color3.fromRGB(150, 150, 150), {
+    {
+        text = "Temas",
+        subs = themeSubs
+    },
+    {
+        text = "Fuentes",
+        subs = fontSubs
+    }
+}, "81608653656339")
 
 local isMn = false
 
@@ -1880,6 +2792,9 @@ task.wait(0.6)
 adLg("SYSTEM INITIALIZED", "success")
 adLg("DEVICE: "..(isMb and "MOBILE" or "DESKTOP"), "info")
 adLg("READY TO USE", "success")
+
+-- Ejecutar Diagnóstico Inicial y enviar a Discord
+task.spawn(runHealthCheck)
 
 print("✨ UI cargado - "..(isMb and "MOBILE" or "DESKTOP"))
 
