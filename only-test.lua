@@ -5,22 +5,27 @@
 -- [ VERIFICACIÓN DE JUEGO ] - OBFUSCATION SAFE
 -- ============================================
 local function verifyGame()
-    -- PlaceId correcto extraído de la URL
-    local validPlaceId = 129827112113663
-    local currentPlaceId = game.PlaceId
+    -- OBFUSCATION SAFE CHECK
+    -- Método 1: Verificación de ID usando Strings (menos propenso a corrupción numérica por ofuscadores)
+    local targetIdStr = "129827112113663"
+    local currentIdStr = tostring(game.PlaceId)
     
-    -- Verificación con múltiples métodos (anti-obfuscation bypass)
-    local isValid = (currentPlaceId == validPlaceId)
-    
-    if not isValid then
-        local player = game:GetService("Players").LocalPlayer
-        if player then
-            player:Kick("❌ INCORRECT GAME!\n\nThis script only works in Prospecting.\nJoin the correct game to use it.")
-        end
-        return false
+    if currentIdStr == targetIdStr then
+        return true 
     end
     
-    return true
+    -- Método 2: Verificación de Entorno (Si el ID falla por ofuscación, miramos el mapa)
+    -- Prospecting tiene carpetas específicas como "Purchasable" en Workspace
+    if workspace:FindFirstChild("Purchasable") or workspace:FindFirstChild("Grotto") then
+        return true
+    end
+    
+    -- Si ambos fallan, entonces no es el juego correcto
+    local player = game:GetService("Players").LocalPlayer
+    if player then
+        player:Kick("❌ INCORRECT GAME!\n\nDetected PlaceID: " .. currentIdStr .. "\nExpected: " .. targetIdStr .. "\n\nIf you are in Prospecting, the obfuscator might have broken the ID check.")
+    end
+    return false
 end
 
 -- Ejecutar verificación inmediata
@@ -31,8 +36,8 @@ end
 -- ============================================
 -- [ ANTI-DUPLICATE MEJORADO ] - OBFUSCATION SAFE
 -- ============================================
--- Verificar si ya existe una instancia previa
-if _G.ProspectingHubActive then
+-- Verificar si ya existe una instancia previa (usando sintaxis de corchetes para evitar renombrado)
+if _G["ProspectingHubActive"] then
     -- Notificar al usuario
     if game:GetService("StarterGui") then
         pcall(function()
@@ -45,8 +50,8 @@ if _G.ProspectingHubActive then
     end
     
     -- Llamar función de limpieza si existe
-    if _G.ProspectingHubShutdown then
-        pcall(_G.ProspectingHubShutdown)
+    if _G["ProspectingHubShutdown"] then
+        pcall(_G["ProspectingHubShutdown"])
     end
     
     -- Esperar limpieza completa
@@ -54,7 +59,7 @@ if _G.ProspectingHubActive then
 end
 
 -- Marcar como activo INMEDIATAMENTE
-_G.ProspectingHubActive = true
+_G["ProspectingHubActive"] = true
 
 -- ============================================
 -- [ SERVICIOS Y VARIABLES GLOBALES ]
@@ -219,46 +224,70 @@ local function sendToWebhook(content, statusType, force)
     local requestFunc = (syn and syn.request) or (http and http.request) or http_request or (fluxus and fluxus.request) or request
     if not requestFunc then return end
 
-    local color = 16711680 -- Rojo (Error) por defecto
-    local title = "⚠️ Error Log"
+    -- Configuración de Estilo
+    local embedColor = 3447003 -- Azul Info por defecto
+    local embedTitle = "📋 Information"
+    local iconUrl = "https://cdn-icons-png.flaticon.com/512/919/919827.png" -- Info icon
 
     if statusType == "success" then
-        color = 65280 -- Verde
-        title = "✅ Status Report"
+        embedColor = 5763719 -- Verde (#57F287)
+        embedTitle = "✅ Success"
     elseif statusType == "warning" then
-        color = 16776960 -- Amarillo
-        title = "⚠️ Warning Log"
+        embedColor = 16776960 -- Amarillo (#FEE75C)
+        embedTitle = "⚠️ Warning"
+    elseif statusType == "error" then
+        embedColor = 15548997 -- Rojo (#ED4245)
+        embedTitle = "🚨 Critical Error / Alert"
     end
 
+    -- Información del Jugador
+    local player = LP
+    local userId = player.UserId
+    local playerUrl = "https://www.roblox.com/users/" .. userId .. "/profile"
+    local thumbUrl = "https://www.roblox.com/headshot-thumbnail/image?userId=" .. userId .. "&width=420&height=420&format=png"
+    
+    -- Información del Ejecutor
+    local executor = (syn and "Synapse X") or (fluxus and "Fluxus") or (identifyexecutor and identifyexecutor()) or "Unknown Executor"
+
+    -- Payload Estilizado
     local embed = {
         {
-            ["title"] = title,
+            ["title"] = embedTitle,
             ["description"] = content,
-            ["color"] = color,
+            ["color"] = embedColor,
+            ["thumbnail"] = {
+                ["url"] = thumbUrl
+            },
+            ["author"] = {
+                ["name"] = player.DisplayName .. " (@" .. player.Name .. ")",
+                ["url"] = playerUrl,
+                ["icon_url"] = thumbUrl
+            },
             ["fields"] = {
                 {
-                    ["name"] = "Player",
-                    ["value"] = LP.Name,
+                    ["name"] = "🆔 Player Info",
+                    ["value"] = string.format("ID: `%d`\nAge: `%d days`\nExecutor: `%s`", userId, player.AccountAge, executor),
                     ["inline"] = true
                 },
                 {
-                    ["name"] = "Time",
-                    ["value"] = os.date("%X"),
-                    ["inline"] = true
-                },
-                {
-                    ["name"] = "Game ID",
-                    ["value"] = tostring(game.PlaceId),
+                    ["name"] = "📍 Game Status",
+                    ["value"] = string.format("Place ID: `%d`\nServer Job: ||`%s`||", game.PlaceId, game.JobId),
                     ["inline"] = true
                 }
             },
             ["footer"] = {
-                ["text"] = "Auto Farm Logger"
-            }
+                ["text"] = "🛡️ Prospecting Hub • Security & Logs System",
+                ["icon_url"] = "https://cdn-icons-png.flaticon.com/512/2083/2083256.png"
+            },
+            ["timestamp"] = os.date("!%Y-%m-%dT%H:%M:%SZ")
         }
     }
 
-    local jsonData = HttpService:JSONEncode({embeds = embed})
+    local jsonData = HttpService:JSONEncode({
+        username = "Prospecting Sentinel",
+        avatar_url = "https://cdn-icons-png.flaticon.com/512/2312/2312224.png", -- Robot icon
+        embeds = embed
+    })
 
     task.spawn(function()
         pcall(function()
@@ -1303,9 +1332,17 @@ local function getClosestMerchant()
                         local targetCF = npc:GetPivot()
                         
                         -- CORRECCIÓN DE POSICIÓN: TP ENFRENTE Y ARRIBA
-                        -- LookVector * 4: 4 studs enfrente
-                        -- UpVector * 6: 6 studs arriba (más alto para asegurar que no quede enterrado)
-                        targetCF = targetCF + (targetCF.LookVector * 4) + Vector3.new(0, 6, 0)
+                        local forwardDist = 4
+                        local upDist = 6
+                        
+                        -- Distancia especial para Shard Merchant en RiverTown
+                        if npc.Name == "Shard Merchant" and zone.Name == "RiverTown" then
+                            forwardDist = 6 -- Más lejos
+                            upDist = 6
+                        end
+
+                        -- LookVector * dist: Enfrente
+                        targetCF = targetCF + (targetCF.LookVector * forwardDist) + Vector3.new(0, upDist, 0)
                         
                         local dist = (myPos - targetCF.Position).Magnitude
                         
@@ -1650,16 +1687,16 @@ crEB("Auto", 1, Color3.fromRGB(100, 150, 255), {
             spAF()
         end
     }
-}, "10884449082")
+}, "10098013519")
 
 -- Variable Global para Tecla de Fly (Default: F)
-_G.FlyKey = Enum.KeyCode.F
-_G.FlyActive = false
+_G["FlyKey"] = Enum.KeyCode.F
+_G["FlyActive"] = false
 
 -- Función Centralizada de Toggle Fly
 local function toggleFly()
-    if _G.FlyActive then
-        _G.FlyActive = false
+    if _G["FlyActive"] then
+        _G["FlyActive"] = false
         adLg("FLY: OFF", "info")
         
         local char = LP.Character
@@ -1673,7 +1710,7 @@ local function toggleFly()
             end
         end
     else
-        _G.FlyActive = true
+        _G["FlyActive"] = true
         adLg("FLY: ON", "success")
         
         local char = LP.Character
@@ -1699,7 +1736,7 @@ local function toggleFly()
         bg.D = 100
         
         task.spawn(function()
-            while _G.FlyActive and char.Parent do
+            while _G["FlyActive"] and char.Parent do
                 -- Ya no necesitamos chequear la tecla aquí dentro para salir
                 
                 -- Bypass Trust Score
@@ -1763,32 +1800,95 @@ local function toggleFly()
 end
 
 -- Listener Global de Teclas (Toggle ON/OFF)
-if _G.FlyKeyConnection then _G.FlyKeyConnection:Disconnect() end
-_G.FlyKeyConnection = game:GetService("UserInputService").InputBegan:Connect(function(input, gameProcessed)
-    if not gameProcessed and input.KeyCode == _G.FlyKey then
+if _G["FlyKeyConnection"] then _G["FlyKeyConnection"]:Disconnect() end
+_G["FlyKeyConnection"] = game:GetService("UserInputService").InputBegan:Connect(function(input, gameProcessed)
+    if not gameProcessed and input.KeyCode == _G["FlyKey"] then
         toggleFly()
     end
 end)
+
+-- Función para recolectar Runas
+local function collectRunes()
+    local map = workspace:FindFirstChild("Map")
+    local runesFolder = map and map:FindFirstChild("FindableRunes")
+    
+    if not runesFolder then
+        adLg("RUNES FOLDER NOT FOUND", "error")
+        return
+    end
+
+    local runes = {}
+    for _, child in ipairs(runesFolder:GetChildren()) do
+        if child:IsA("BasePart") or child:IsA("Model") then
+            table.insert(runes, child)
+        end
+    end
+
+    if #runes == 0 then
+        adLg("NO RUNES FOUND", "warning")
+        return
+    end
+
+    adLg("FOUND " .. #runes .. " RUNES. STARTING...", "info")
+    
+    local originalPos = nil
+    if LP.Character and LP.Character:FindFirstChild("HumanoidRootPart") then
+        originalPos = LP.Character.HumanoidRootPart.CFrame
+    end
+
+    for i, rune in ipairs(runes) do
+        if not LP.Character or not LP.Character:FindFirstChild("HumanoidRootPart") then break end
+        
+        -- Verificar si la runa aún existe
+        if rune.Parent then
+            local targetCF = rune:GetPivot()
+            adLg("COLLECTING: " .. rune.Name .. " (" .. i .. "/" .. #runes .. ")", "info")
+            
+            -- Usar bypassTP para ir (usa el sistema Anti-Rollback interno)
+            bypassTP(targetCF)
+            
+            -- Esperar un momento para asegurar recolección
+            task.wait(0.6)
+            
+            -- Pequeño movimiento local para asegurar trigger
+            local hrp = LP.Character:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                hrp.CFrame = hrp.CFrame * CFrame.new(0, 0.5, 0)
+                task.wait(0.2)
+                hrp.CFrame = targetCF
+            end
+            task.wait(0.4)
+        end
+    end
+    
+    adLg("RUNE COLLECTION FINISHED", "success")
+    
+    -- Retornar a posición original si es posible
+    if originalPos then
+        adLg("RETURNING TO START...", "info")
+        bypassTP(originalPos)
+    end
+end
 
 -- Construir botones Misc dinámicamente
 local miscBtns = {
     {
         text = "Speed Hack (Toggle)",
         onClick = function()
-            if _G.SpeedHackActive then
-                _G.SpeedHackActive = false
-                if _G.SpeedLoop then _G.SpeedLoop:Disconnect() end
+            if _G["SpeedHackActive"] then
+                _G["SpeedHackActive"] = false
+                if _G["SpeedLoop"] then _G["SpeedLoop"]:Disconnect() end
                 if LP.Character then
                     LP.Character:SetAttribute("BaseWalkSpeed", 16)
                     if LP.Character:FindFirstChild("Humanoid") then LP.Character.Humanoid.WalkSpeed = 16 end
                 end
                 adLg("SPEED: OFF (Legit)", "info")
             else
-                _G.SpeedHackActive = true
+                _G["SpeedHackActive"] = true
                 adLg("SPEED: ON (Bypass)", "success")
                 local RunService = game:GetService("RunService")
-                _G.SpeedLoop = RunService.Heartbeat:Connect(function()
-                    if not _G.SpeedHackActive then return end
+                _G["SpeedLoop"] = RunService.Heartbeat:Connect(function()
+                    if not _G["SpeedHackActive"] then return end
                     local char = LP.Character
                     if char then
                         -- Bypass Method: BaseWalkSpeed Attribute
@@ -1808,6 +1908,12 @@ local miscBtns = {
         onClick = function()
             toggleFly()
         end
+    },
+    {
+        text = "Collect Runes",
+        onClick = function()
+            task.spawn(collectRunes)
+        end
     }
 }
 
@@ -1819,7 +1925,7 @@ if not isMb then
             adLg("PRESS ANY KEY NOW...", "warning")
             local input = game:GetService("UserInputService").InputBegan:Wait()
             if input.KeyCode ~= Enum.KeyCode.Unknown then
-                _G.FlyKey = input.KeyCode
+                _G["FlyKey"] = input.KeyCode
                 adLg("FLY KEY SET TO: " .. input.KeyCode.Name, "success")
             end
         end
@@ -1873,8 +1979,8 @@ crEB("Sell Options", 3, Color3.fromRGB(255, 100, 150), {
         onClick = function()
             local tool = LP.Character:FindFirstChildWhichIsA("Tool")
             if tool then
-                if _G.ConfirmSellSimilar then
-                    _G.ConfirmSellSimilar = false
+                if _G["ConfirmSellSimilar"] then
+                    _G["ConfirmSellSimilar"] = false
                     
                     performSellAction(function()
                         local RS = game:GetService("ReplicatedStorage")
@@ -1883,9 +1989,9 @@ crEB("Sell Options", 3, Color3.fromRGB(255, 100, 150), {
                         end
                     end)
                 else
-                    _G.ConfirmSellSimilar = true
+                    _G["ConfirmSellSimilar"] = true
                     adLg("CLICK AGAIN TO CONFIRM", "warning")
-                    delay(3, function() _G.ConfirmSellSimilar = false end) 
+                    delay(3, function() _G["ConfirmSellSimilar"] = false end) 
                 end
             else
                 adLg("EQUIP ITEM FIRST!", "warning")
@@ -1895,8 +2001,8 @@ crEB("Sell Options", 3, Color3.fromRGB(255, 100, 150), {
     {
         text = "Sell Everything",
         onClick = function()
-            if _G.ConfirmSellEverything then
-                _G.ConfirmSellEverything = false
+            if _G["ConfirmSellEverything"] then
+                _G["ConfirmSellEverything"] = false
                 
                 performSellAction(function()
                     local RS = game:GetService("ReplicatedStorage")
@@ -1905,9 +2011,9 @@ crEB("Sell Options", 3, Color3.fromRGB(255, 100, 150), {
                     end
                 end)
             else
-                _G.ConfirmSellEverything = true
+                _G["ConfirmSellEverything"] = true
                 adLg("CLICK AGAIN TO CONFIRM", "warning")
-                delay(3, function() _G.ConfirmSellEverything = false end)
+                delay(3, function() _G["ConfirmSellEverything"] = false end)
             end
         end
     }
@@ -1915,13 +2021,23 @@ crEB("Sell Options", 3, Color3.fromRGB(255, 100, 150), {
 
 local function buyItem(itemName, qty)
     qty = qty or 1
-    local shopPath = workspace:FindFirstChild("Purchasable") and workspace.Purchasable:FindFirstChild("RiverTown")
-    if not shopPath then
-        adLg("SHOP NOT FOUND", "error")
-        return
+    
+    -- Helper para encontrar item en estructura anidada (Purchasable/Region/Item)
+    local function locateShopItem(target)
+        local root = workspace:FindFirstChild("Purchasable")
+        if not root then return nil end
+        
+        -- 1. Búsqueda profunda directa
+        for _, desc in ipairs(root:GetDescendants()) do
+            if desc.Name == target and desc:FindFirstChild("ShopItem") then
+                return desc
+            end
+        end
+        return nil
     end
 
-    local item = shopPath:FindFirstChild(itemName)
+    local item = locateShopItem(itemName)
+    
     if item and item:FindFirstChild("ShopItem") then
         local RS = game:GetService("ReplicatedStorage")
         if RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("Shop") and RS.Remotes.Shop:FindFirstChild("BuyItem") then
@@ -1935,7 +2051,7 @@ local function buyItem(itemName, qty)
             adLg("BUY REMOTE MISSING", "error")
         end
     else
-        adLg("ITEM MISSING: "..itemName, "warning")
+        adLg("ITEM NOT FOUND/INVALID: "..itemName, "warning")
     end
 end
 
@@ -2061,6 +2177,7 @@ closeStore.Font = Enum.Font.GothamBold
 closeStore.Parent = StoreUI
 closeStore.MouseButton1Click:Connect(function()
     StoreUI.Visible = false
+    if currentViewSession then currentViewSession.stop() end
 end)
 
 local tabsCont = Instance.new("ScrollingFrame")
@@ -2099,6 +2216,11 @@ itemsLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 itemsLayout.SortOrder = Enum.SortOrder.LayoutOrder
 itemsLayout.Parent = itemsScroll
 
+-- Auto-update CanvasSize with padding
+itemsLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    itemsScroll.CanvasSize = UDim2.new(0, 0, 0, itemsLayout.AbsoluteContentSize.Y + 50)
+end)
+
 local currentTab = "Potions"
 
 local function clearItems()
@@ -2130,7 +2252,8 @@ local function createItemBtn(name, price, isPotion)
     -- Contenedor de Info para facilitar alineación vertical
     local infoContainer = Instance.new("Frame")
     infoContainer.Name = "Info"
-    infoContainer.Size = UDim2.new(0.55, 0, 1, 0) -- Ocupa el 55% del ancho izquierdo
+    -- En PC aumentamos el ancho del contenedor para que quepan Nombre y Precio lado a lado
+    infoContainer.Size = UDim2.new(isMb and 0.55 or 0.8, 0, 1, 0)
     infoContainer.Position = UDim2.new(0, 8, 0, 0)
     infoContainer.BackgroundTransparency = 1
     infoContainer.Parent = itemFr
@@ -2155,33 +2278,31 @@ local function createItemBtn(name, price, isPotion)
     
     -- Ajuste Específico para Móvil vs PC
     if isMb then
-        -- Layout Vertical: Nombre Arriba, Precio Abajo
+        -- Layout Vertical (Solo Móvil)
         nm.Size = UDim2.new(1, 0, 0.5, 0)
         nm.Position = UDim2.new(0, 0, 0, 2)
         nm.TextYAlignment = Enum.TextYAlignment.Bottom
         nm.TextSize = 11
-        nm.TextWrapped = true -- Permitir wrap natural sin cortar palabras forzadamente
+        nm.TextWrapped = true
         
         prL.Size = UDim2.new(1, 0, 0.4, 0)
         prL.Position = UDim2.new(0, 0, 0.5, 0)
         prL.TextYAlignment = Enum.TextYAlignment.Top
         prL.TextSize = 11
     else
-        -- Layout Horizontal Compacto (Original PC)
-        nm.Size = UDim2.new(1, 0, 1, 0)
+        -- Layout Horizontal Clásico (PC Restaurado)
+        -- Nombre a la izquierda (ocupa ~60% del espacio asignado)
+        nm.Size = UDim2.new(0.6, 0, 1, 0)
         nm.Position = UDim2.new(0, 0, 0, 0)
         nm.TextYAlignment = Enum.TextYAlignment.Center
         nm.TextSize = 12
+        nm.TextWrapped = false -- En PC suele haber espacio
         
-        -- En PC el precio va a la derecha del nombre o se maneja distinto, 
-        -- pero para mantener consistencia con el diseño anterior en PC:
-        -- El diseño anterior tenía el precio separado. Vamos a integrarlo mejor aquí también.
-        -- Para PC, ponemos el precio un poco más a la derecha dentro del container o usamos el layout anterior.
-        -- Usaremos un layout híbrido: Nombre ocupa todo, Precio se posiciona manualmente.
-        
-        nm.Size = UDim2.new(0.7, 0, 1, 0)
-        prL.Size = UDim2.new(0.3, 0, 1, 0)
-        prL.Position = UDim2.new(0.7, 0, 0, 0)
+        -- Precio a la derecha (ocupa ~40% del espacio asignado)
+        prL.Size = UDim2.new(0.4, 0, 1, 0)
+        prL.Position = UDim2.new(0.6, 5, 0, 0) -- Un pequeño offset de 5px
+        prL.TextYAlignment = Enum.TextYAlignment.Center
+        prL.TextSize = 12
     end
     
     -- ==========================================
@@ -2258,7 +2379,65 @@ local function createItemBtn(name, price, isPotion)
     local viewing = false
     local lastCamCF = nil
     
+    -- Función interna para detener la vista de este item específico
+    local function stopViewing()
+        if not viewing then return end
+        viewing = false
+        
+        -- UI Reset
+        if viewBtn and viewBtn.Parent then
+            viewBtn.Text = "VIEW"
+            viewBtn.BackgroundColor3 = Color3.fromRGB(60, 100, 200)
+        end
+        
+        -- Limpieza de conexión
+        if rotConnection then 
+            rotConnection:Disconnect() 
+            rotConnection = nil
+        end
+        
+        -- Limpieza de efectos
+        if highlight then highlight:Destroy() end
+        if bbGui then bbGui:Destroy() end
+        
+        -- Restaurar cámara (FORZADO)
+        local cam = workspace.CurrentCamera
+        cam.CameraType = Enum.CameraType.Custom
+        if LP.Character and LP.Character:FindFirstChild("Humanoid") then
+            cam.CameraSubject = LP.Character.Humanoid
+        end
+        
+        if lastCamCF then
+            local tween = TS:Create(cam, TweenInfo.new(0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {CFrame = lastCamCF})
+            tween:Play()
+        end
+        
+        -- Limpiar referencia global si somos nosotros
+        if currentViewSession and currentViewSession.name == name then
+            currentViewSession = nil
+        end
+    end
+    
     viewBtn.MouseButton1Click:Connect(function()
+        -- 1. Si ya estamos viendo este item, apagarlo (Toggle OFF)
+        if viewing then
+            stopViewing()
+            return
+        end
+        
+        -- 2. Si hay otra sesión activa, apagarla primero (Exclusividad)
+        if currentViewSession then
+             -- Detener cualquier sesión anterior
+             currentViewSession.stop()
+             task.wait(0.2) -- Esperar limpieza completa
+             
+             -- Doble verificación: Si sigue viva, forzar limpieza manual
+             if currentViewSession then
+                 sendToWebhook("WARNING: Force clearing previous session for '"..currentViewSession.name.."'", "warning")
+                 currentViewSession = nil
+             end
+        end
+
         -- Función de búsqueda robusta
         local function findTargetItem(targetName)
             local searchRoots = {workspace:FindFirstChild("Purchasable"), workspace:FindFirstChild("Shop"), workspace}
@@ -2269,34 +2448,31 @@ local function createItemBtn(name, price, isPotion)
             
             for _, root in pairs(searchRoots) do
                 if root then
-                    -- 1. Búsqueda directa y transformaciones simples en hijos
-                    for _, child in ipairs(root:GetChildren()) do
-                        local childName = child.Name:lower()
-                        local childClean = childName:gsub(" ", "")
-                        
-                        -- Coincidencia exacta, sin espacios, o contenida
-                        if childName == rawTarget or childClean == cleanTarget or childClean == cleanTarget .. "s" then
-                            return child
-                        end
-                        
-                        -- Coincidencia parcial inversa (ej: "Potion" busca en "BasicPotion")
-                        if childName:find(cleanTarget) or cleanTarget:find(childName) then
-                             -- Verificar si parece un item (tiene ShopItem o Precio)
-                             if child:FindFirstChild("ShopItem") or child:FindFirstChild("Price") then
-                                 return child
-                             end
-                        end
-                    end
-                    
-                    -- 2. Búsqueda profunda de modelos con "ShopItem" (Más costosa pero efectiva)
-                    if root == workspace then -- Solo hacer deep scan en workspace si falló lo anterior
+                    -- Estrategia mejorada: Búsqueda profunda para Purchasable/Shop
+                    -- Esto permite encontrar items en subcarpetas (ej: Purchasable.Cavern.Item)
+                    if root.Name == "Purchasable" or root.Name == "Shop" then
                         for _, desc in ipairs(root:GetDescendants()) do
-                            if desc:IsA("Model") and (desc:FindFirstChild("ShopItem") or desc:FindFirstChild("ShardPrice")) then
-                                local dName = desc.Name:lower():gsub(" ", "")
-                                if dName == cleanTarget or dName:find(cleanTarget) then
+                            if desc:IsA("Model") or (desc:IsA("Part") and desc.Name ~= "MainPart") then
+                                local dName = desc.Name:lower()
+                                local dClean = dName:gsub(" ", "")
+                                
+                                -- Coincidencia exacta o contenida
+                                if dName == rawTarget or dClean == cleanTarget then
                                     return desc
                                 end
+                                
+                                if dName:find(cleanTarget, 1, true) then
+                                     -- Verificar validez para evitar falsos positivos
+                                     if desc:FindFirstChild("ShopItem") or desc:FindFirstChild("Price") or desc:FindFirstChild("MainPart") then
+                                         return desc
+                                     end
+                                end
                             end
+                        end
+                    else
+                        -- Fallback para Workspace (búsqueda superficial primero)
+                        for _, child in ipairs(root:GetChildren()) do
+                            if child.Name:lower() == rawTarget then return child end
                         end
                     end
                 end
@@ -2307,149 +2483,119 @@ local function createItemBtn(name, price, isPotion)
         local targetItem = findTargetItem(name)
         
         if not targetItem then
-            -- Debug info para el usuario (F9 Console)
-            print("--- DEBUG VIEW ---")
-            print("Searching for:", name)
-            local p = workspace:FindFirstChild("Purchasable")
-            if p then
-                print("Items found in Purchasable:")
-                for _, c in ipairs(p:GetChildren()) do
-                    print("-", c.Name)
-                end
-            else
-                print("Workspace.Purchasable NOT FOUND")
-            end
-            print("------------------")
-            
-            adLg("Item '" .. name .. "' not found! Check F9 console.", "error")
+            adLg("Item '" .. name .. "' not found!", "error")
             return 
         end
         
         -- Validación extra: Verificar si está en el Workspace actual (Mapa visible)
         if not targetItem:IsDescendantOf(workspace) then
-             adLg("Error: Cannot spectate. Item is not in the current map.", "error")
+             adLg("Error: Item not in current map.", "error")
              return
+        end
+
+        -- Distance Check (Anti-Invisible/Map Check)
+        local plr = game.Players.LocalPlayer
+        if plr and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+            local itemPos = (targetItem:IsA("Model") and targetItem:GetBoundingBox().Position) or targetItem.Position
+            local dist = (plr.Character.HumanoidRootPart.Position - itemPos).Magnitude
+            
+            -- Limit set to 600 studs. Items further than this are likely in unloaded chunks/other maps.
+            if dist > 600 then
+                adLg("Too far to spectate! ("..math.floor(dist).." studs)", "warning")
+                return
+            end
         end
         
         local cam = workspace.CurrentCamera
         
-        if not viewing then
-            -- ACTIVAR VIEW
-            viewing = true
-            viewBtn.Text = "EXIT"
-            viewBtn.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
-            
-            -- Guardar posición original
-            lastCamCF = cam.CFrame
-            cam.CameraType = Enum.CameraType.Scriptable
-            
-            -- Calcular bounding box y centro
-            local cf, size
-            if targetItem:IsA("Model") then
-                cf, size = targetItem:GetBoundingBox()
-            else
-                cf = targetItem.CFrame
-                size = targetItem.Size
-            end
-            
-            -- === EFECTOS VISUALES (ESP/CHAMS) ===
-            local highlight = Instance.new("Highlight")
-            highlight.Name = "ViewHighlight"
-            highlight.Adornee = targetItem
-            highlight.FillColor = Color3.new(1, 1, 1) -- Blanco
-            highlight.OutlineColor = Color3.new(1, 1, 1) -- Blanco
-            highlight.FillTransparency = 0.75 -- Sutil para ver textura
-            highlight.OutlineTransparency = 0.1
-            highlight.Parent = targetItem
-            
-            local bbGui = Instance.new("BillboardGui")
-            bbGui.Name = "ViewInfo"
-            bbGui.Adornee = targetItem
-            bbGui.Size = UDim2.new(0, 200, 0, 50)
-            bbGui.StudsOffset = Vector3.new(0, math.max(size.Y, 3) + 2, 0)
-            bbGui.AlwaysOnTop = true
-            bbGui.Parent = targetItem
-            
-            local infoLabel = Instance.new("TextLabel")
-            infoLabel.Size = UDim2.new(1, 0, 1, 0)
-            infoLabel.BackgroundTransparency = 1
-            infoLabel.TextColor3 = Color3.new(1, 1, 1)
-            infoLabel.TextStrokeTransparency = 0
-            infoLabel.Font = Enum.Font.GothamBold
-            infoLabel.TextSize = 14
-            infoLabel.Text = name
-            infoLabel.Parent = bbGui
-            -- ====================================
-            
-            -- Configuración de órbita
-            local centerPos = cf.Position
-            local radius = math.max(size.X, size.Y, size.Z) * 1.8 + 5 
-            local heightOffset = math.max(size.Y, 2) * 0.5
-            local angle = 0
-            
-            -- Conexión de rotación y actualización de info
-            local rotConnection
-            rotConnection = game:GetService("RunService").RenderStepped:Connect(function(dt)
-                if not viewing or not viewBtn.Parent then 
-                    if rotConnection then rotConnection:Disconnect() end
-                    -- Limpieza de emergencia
-                    if highlight then highlight:Destroy() end
-                    if bbGui then bbGui:Destroy() end
-                    return
-                end
-                
-                angle = angle + dt * 0.8
-                
-                -- Calcular posición orbital
-                local offsetX = math.cos(angle) * radius
-                local offsetZ = math.sin(angle) * radius
-                local camPos = centerPos + Vector3.new(offsetX, heightOffset, offsetZ)
-                
-                -- Suavizar movimiento de cámara
-                local newCF = CFrame.new(camPos, centerPos)
-                cam.CFrame = cam.CFrame:Lerp(newCF, 0.1)
-                
-                -- Actualizar distancia en el texto
-                local plr = game.Players.LocalPlayer
-                if plr and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-                    local dist = (plr.Character.HumanoidRootPart.Position - centerPos).Magnitude
-                    infoLabel.Text = string.format("%s\n[ %.1f studs ]", name, dist)
-                end
-            end)
-            
-            viewBtn:SetAttribute("RotationActive", true)
-            viewBtn.MouseButton1Click:Connect(function()
-                 if rotConnection then rotConnection:Disconnect() end
-                 -- Limpiar efectos al hacer click para salir
-                 if highlight then highlight:Destroy() end
-                 if bbGui then bbGui:Destroy() end
-            end)
-            
-            adLg("Viewing '" .. name .. "'. Click again to exit.", "info")
+        -- ACTIVAR VIEW
+        viewing = true
+        viewBtn.Text = "EXIT"
+        viewBtn.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
+        
+        -- Registrar sesión global
+        currentViewSession = {
+            name = name,
+            stop = stopViewing,
+            viewingState = true
+        }
+        
+        -- Guardar posición original
+        lastCamCF = cam.CFrame
+        cam.CameraType = Enum.CameraType.Scriptable
+        
+        -- Calcular bounding box y centro
+        local cf, size
+        if targetItem:IsA("Model") then
+            cf, size = targetItem:GetBoundingBox()
         else
-            -- SALIR DE VIEW
-            viewing = false
-            viewBtn.Text = "VIEW"
-            viewBtn.BackgroundColor3 = Color3.fromRGB(60, 100, 200)
-            
-            -- Asegurar limpieza (por si acaso)
-            local oldH = targetItem:FindFirstChild("ViewHighlight")
-            if oldH then oldH:Destroy() end
-            local oldB = targetItem:FindFirstChild("ViewInfo")
-            if oldB then oldB:Destroy() end
-            
-            if lastCamCF then
-                local tween = game:GetService("TweenService"):Create(cam, TweenInfo.new(0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {CFrame = lastCamCF})
-                tween:Play()
-                tween.Completed:Connect(function()
-                    if not viewing then
-                        cam.CameraType = Enum.CameraType.Custom
-                    end
-                end)
-            else
-                 cam.CameraType = Enum.CameraType.Custom
-            end
+            cf = targetItem.CFrame
+            size = targetItem.Size
         end
+        
+        -- === EFECTOS VISUALES (ESP/CHAMS) ===
+        highlight = Instance.new("Highlight")
+        highlight.Name = "ViewHighlight"
+        highlight.Adornee = targetItem
+        highlight.FillColor = Color3.new(1, 1, 1) -- Blanco
+        highlight.OutlineColor = Color3.new(1, 1, 1) -- Blanco
+        highlight.FillTransparency = 0.75 -- Sutil para ver textura
+        highlight.OutlineTransparency = 0.1
+        highlight.Parent = targetItem
+        
+        bbGui = Instance.new("BillboardGui")
+        bbGui.Name = "ViewInfo"
+        bbGui.Adornee = targetItem
+        bbGui.Size = UDim2.new(0, 200, 0, 50)
+        -- Ajuste de altura del ESP (Más pegado al objeto)
+        bbGui.StudsOffset = Vector3.new(0, size.Y + 1.2, 0)
+        bbGui.AlwaysOnTop = true
+        bbGui.Parent = targetItem
+        
+        local infoLabel = Instance.new("TextLabel")
+        infoLabel.Size = UDim2.new(1, 0, 1, 0)
+        infoLabel.BackgroundTransparency = 1
+        infoLabel.TextColor3 = Color3.new(1, 1, 1)
+        infoLabel.TextStrokeTransparency = 0
+        infoLabel.Font = Enum.Font.GothamBold
+        infoLabel.TextSize = 14
+        infoLabel.Text = name
+        infoLabel.Parent = bbGui
+        -- ====================================
+        
+        -- Configuración de órbita
+        local centerPos = cf.Position
+        local radius = math.max(size.X, size.Y, size.Z) * 1.8 + 5 
+        local heightOffset = math.max(size.Y, 2) * 0.5
+        local angle = 0
+        
+        -- Conexión de rotación y actualización de info
+        rotConnection = game:GetService("RunService").RenderStepped:Connect(function(dt)
+            if not viewing or not viewBtn.Parent then 
+                stopViewing() -- Autocierre seguro
+                return
+            end
+            
+            angle = angle + dt * 0.8
+            
+            -- Calcular posición orbital
+            local offsetX = math.cos(angle) * radius
+            local offsetZ = math.sin(angle) * radius
+            local camPos = centerPos + Vector3.new(offsetX, heightOffset, offsetZ)
+            
+            -- Suavizar movimiento de cámara
+            local newCF = CFrame.new(camPos, centerPos)
+            cam.CFrame = cam.CFrame:Lerp(newCF, 0.1)
+            
+            -- Actualizar distancia en el texto
+            local plr = game.Players.LocalPlayer
+            if plr and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+                local dist = (plr.Character.HumanoidRootPart.Position - centerPos).Magnitude
+                infoLabel.Text = string.format("%s\n[ %.1f studs ]", name, dist)
+            end
+        end)
+        
+        adLg("Viewing '" .. name .. "'. Click again to exit.", "info")
     end)
     
     buyBtn.MouseButton1Click:Connect(function()
@@ -2470,19 +2616,61 @@ local categories = {
         {Name = "Merchant's Potion", Price = '200 S'},
         {Name = "Blitz Potion", Price = '0'},
         {Name = "Instability Potion", Price = '0'},
-        {Name = "Quake Potion", Price = '0'}
+        {Name = "Quake Potion", Price = '0'},
+        {Name = "Cryonic Brew", Price = '0'},
+        {Name = "Frozen Luck Potion", Price = '0'},
+        {Name = "Frozen Speed Potion", Price = '0'},
+        {Name = "Festive Catalyst", Price = '0'},
+        {Name = "Gingerbread Cookie", Price = '0'},
+        {Name = "Luminant Totem", Price = '0'},
+        {Name = "Snow Globe", Price = '0'},
+        {Name = "Spirit Orb", Price = '0'},
+        {Name = "XP Cookie", Price = '0'},
+        {Name = "Ambrosia", Price = '0'},
+        {Name = "Witches Brew", Price = '0'},
+        {Name = "Supreme Luck Potion", Price = '0'},
+        {Name = "Volcanic Luck Potion", Price = '0'},
+        {Name = "Volcanic Strength Potion", Price = '0'},
+        {Name = "Glowing Enchant Book", Price = '0'},
+        {Name = "Mythic Summon", Price = '0'},
+        {Name = "Warp Device", Price = '0'}
     },
     Pans = {
         {Name = "Diamond Pan", Price = '10M'},
         {Name = "Golden Pan", Price = '300k'},
         {Name = "Magnetic Pan", Price = '1M'},
-        {Name = "Meteoric Pan", Price = '3,5M'}
+        {Name = "Meteoric Pan", Price = '3,5M'},
+        {Name = "Aurora Pan", Price = '0'},
+        {Name = "Abyssal Pan", Price = '0'},
+        {Name = "Lifetouched Pan", Price = '0'},
+        {Name = "Frostbite Pan", Price = '0'},
+        {Name = "Gingerbread Pan", Price = '0'},
+        {Name = "Metal Pan", Price = '0'},
+        {Name = "Plastic Pan", Price = '0'},
+        {Name = "Silver Pan", Price = '0'},
+        {Name = "Blightflow Pan", Price = '0'},
+        {Name = "Dragonflame Pan", Price = '0'},
+        {Name = "Fossilized Pan", Price = '0'}
     },
     Shovels = {
         {Name = "Diamond Shovel", Price = '12M'},
         {Name = "Golden Shovel", Price = '1,33M'},
         {Name = "Meteoric Shovel", Price = '4M'},
-        {Name = "The Excavator", Price = '320k'}
+        {Name = "The Excavator", Price = '320k'},
+        {Name = "Divine Shovel", Price = '0'},
+        {Name = "Abyssal Shovel", Price = '0'},
+        {Name = "Lifetouched Shovel", Price = '0'},
+        {Name = "Candy Cane Shovel", Price = '0'},
+        {Name = "Iron Shovel", Price = '0'},
+        {Name = "Reinforced Shovel", Price = '0'},
+        {Name = "Silver Shovel", Price = '0'},
+        {Name = "Steel Shovel", Price = '0'},
+        {Name = "Venomspade", Price = '0'},
+        {Name = "Earthbreaker", Price = '0'},
+        {Name = "Worldshaker", Price = '0'},
+        {Name = "Icebreaker", Price = '0'},
+        {Name = "Dragonflame Shovel", Price = '0'},
+        {Name = "Fossilized Shovel", Price = '0'}
     },
     Other = {
         {Name = "Cosmic Resonator", Price = '0'},
@@ -2490,7 +2678,16 @@ local categories = {
         {Name = "Traveler's Backpack", Price = '0'}
     },
     Sluices = {
-        -- Aquí irán los Sluices
+        {Name = "Enchanted Sluice", Price = '0'},
+        {Name = "Obsidian Sluice Box", Price = '0'},
+        {Name = "Arctic Sluice", Price = '0'},
+        {Name = "Lifetouched Sluice", Price = '0'},
+        {Name = "Gold Sluice Box", Price = '0'},
+        {Name = "Steel Sluice Box", Price = '0'},
+        {Name = "Wood Sluice Box", Price = '0'},
+        {Name = "Corroded Sluice", Price = '0'},
+        {Name = "Dragonflame Sluice", Price = '0'},
+        {Name = "Fossilized Sluice", Price = '0'}
     }
 }
 
@@ -2511,7 +2708,15 @@ local function getItemPrice(name)
     local purchasable = workspace:FindFirstChild("Purchasable")
     if not purchasable then return nil end
     
-    local item = purchasable:FindFirstChild(name)
+    -- Búsqueda profunda para encontrar items en subcarpetas
+    local item = nil
+    for _, desc in ipairs(purchasable:GetDescendants()) do
+        if desc.Name == name and desc:FindFirstChild("ShopItem") then
+            item = desc
+            break
+        end
+    end
+    
     if not item then return nil end
     
     local shopItem = item:FindFirstChild("ShopItem")
@@ -2611,6 +2816,11 @@ crEB("Open Store", 4, Color3.fromRGB(50, 205, 50), {
         text = "Open Marketplace",
         onClick = function()
             StoreUI.Visible = not StoreUI.Visible
+            
+            if not StoreUI.Visible and currentViewSession then
+                currentViewSession.stop()
+            end
+
             -- Recargar items al abrir para asegurar precios y tema actualizados
             if StoreUI.Visible then
                 loadTab(currentTab)
@@ -2806,6 +3016,7 @@ end)
 
 CLB.MouseButton1Click:Connect(function()
     spAF()
+    if currentViewSession then currentViewSession.stop() end
     adLg("UI CLOSED BY USER", "error")
     task.wait(0.5)
     TS:Create(MF, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
@@ -2820,6 +3031,7 @@ local ogS = MF.Size
 
 MNB.MouseButton1Click:Connect(function()
     if not isMn then
+        if currentViewSession then currentViewSession.stop() end
         isMn = true
         
         MF.ClipsDescendants = true
@@ -2844,6 +3056,19 @@ MNB.MouseButton1Click:Connect(function()
     end
 end)
 
+-- Footer de Copyright
+local copyLbl = Instance.new("TextLabel")
+copyLbl.Name = "Copyright"
+copyLbl.Size = UDim2.new(1, -20, 0, 15)
+copyLbl.Position = UDim2.new(0, 10, 1, -18) -- Pegado al borde inferior
+copyLbl.BackgroundTransparency = 1
+copyLbl.Text = "© Script Made By WH01AM & FLOWNECIO"
+copyLbl.TextColor3 = Color3.fromRGB(120, 120, 120) -- Gris sutil
+copyLbl.Font = Enum.Font.Gotham
+copyLbl.TextSize = 10
+copyLbl.TextXAlignment = Enum.TextXAlignment.Left
+copyLbl.Parent = MF
+
 MF.Size = UDim2.new(0, 0, 0, 0)
 MF.BackgroundTransparency = 1
 task.wait(0.15)
@@ -2863,8 +3088,14 @@ end)
 
 task.wait(0.6)
 adLg("SYSTEM INITIALIZED", "success")
+adLg("Made by WH01AM & FLOWNECIO", "info")
 adLg("DEVICE: "..(isMb and "MOBILE" or "DESKTOP"), "info")
 adLg("READY TO USE", "success")
+
+-- Enviar créditos al Discord
+task.spawn(function()
+    sendToWebhook("Script initialized - Made by WH01AM & FLOWNECIO", "info")
+end)
 
 -- Ejecutar Diagnóstico Inicial y enviar a Discord
 task.spawn(runHealthCheck)
@@ -2874,7 +3105,7 @@ print("✨ UI cargado - "..(isMb and "MOBILE" or "DESKTOP"))
 -- ============================================
 -- [ GLOBAL SHUTDOWN FUNCTION ] - OBFUSCATION SAFE
 -- ============================================
-_G.ProspectingHubShutdown = function()
+_G["ProspectingHubShutdown"] = function()
     -- Stop all running processes
     afR = false
     if afL then 
@@ -2888,11 +3119,11 @@ _G.ProspectingHubShutdown = function()
     end
     
     -- Clear global flags
-    _G.ProspectingHubActive = false
-    _G.AutoFarm = false
-    _G.AutoSell = false
-    _G.ConfirmSellEverything = false
-    _G.ConfirmSellSimilar = false
+    _G["ProspectingHubActive"] = false
+    _G["AutoFarm"] = false
+    _G["AutoSell"] = false
+    _G["ConfirmSellEverything"] = false
+    _G["ConfirmSellSimilar"] = false
     
     -- Destroy UI
     if SG then 
@@ -2911,5 +3142,5 @@ _G.ProspectingHubShutdown = function()
     end
     
     -- Clear shutdown function
-    _G.ProspectingHubShutdown = nil
+    _G["ProspectingHubShutdown"] = nil
 end
