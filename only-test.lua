@@ -31,7 +31,7 @@ local LPLR = PLRS.LocalPlayer
 
 -- [ BYPASS TP — Multi-method system ]
 -- Active method: "classic" | "stepped" | "scooter"
-local TP_METHOD  = "stepped"  -- default
+local TP_METHOD  = "classic"  -- default
 local _SPAWN_PT  = nil
 local _SPAWN_POS = nil
 
