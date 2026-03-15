@@ -9,40 +9,175 @@ local RS   = game:GetService("RunService")
 if _G.CENTRAL_LOADED then
     local OLD = CORE:FindFirstChild("CEN_V2") or PLRS.LocalPlayer.PlayerGui:FindFirstChild("CEN_V2")
     if OLD then
-        warn("Central Glass Already Loaded!")
+        warn("Script is  Already Loaded!")
         return
     else
         _G.CENTRAL_LOADED = false
     end
 end
 _G.CENTRAL_LOADED = true
+_G.CENTRAL_NOTIFS_REF = nil
+_G.EXE = {
+    FARM_RUNNING = false, FARM_THREAD = nil,
+    CC_RUNNING   = false, CC_THREAD   = nil,
+    CF_RUNNING   = false, CF_THREAD   = nil,
+    WH_RUNNING   = false, WH_THREAD   = nil,
+    BF_RUNNING   = false, BF_THREAD   = nil,
+    FLY_ON = false, SPD_ON = false, JMP_ON = false, CF_ON = false
+}
 
 -- [ LOC ]
 local LPLR = PLRS.LocalPlayer
 
--- [ BYPASS TP — nuevo metodo con objeto ]
+-- [ BYPASS TP — Multi-method system ]
+-- Active method: "classic" | "stepped" | "scooter"
+local TP_METHOD  = "stepped"  -- default
 local _SPAWN_PT  = nil
 local _SPAWN_POS = nil
-local function BYPASS_TP(pos)
+
+local function _TP_GET_SPAWN()
     if not _SPAWN_PT then
         _SPAWN_PT  = workspace.spawn_Assets.Points["Trinity Ave. Plaza"]
         _SPAWN_POS = _SPAWN_PT.Position
     end
+end
+
+local function _TP_WAIT_STABLE()
+    local char = LPLR.Character or LPLR.CharacterAdded:Wait()
+    local hrp  = char:WaitForChild("HumanoidRootPart", 5)
+    if not hrp then return end
+    
+    local stableFrames = 0
+    local lastPos = hrp.Position
+
+    while stableFrames < 10 do
+        RS.Heartbeat:Wait()
+        char = LPLR.Character or LPLR.CharacterAdded:Wait()
+        hrp  = char:FindFirstChild("HumanoidRootPart")
+        if not hrp then break end
+        
+        local pos = hrp.Position
+        if (pos - lastPos).Magnitude < 0.1 then
+            stableFrames = stableFrames + 1
+        else
+            stableFrames = 0
+        end
+        lastPos = pos
+    end
+end
+
+-- ── MÉTODO 1: Classic — mejorado con stability y snap (12 loops) ────
+local function TP_CLASSIC(targetPos)
+    _TP_GET_SPAWN()
     game:GetService("ReplicatedStorage").Remotes.Spawn:FireServer(_SPAWN_PT)
-    -- Wait until character arrives at spawn point
+    
+    _TP_WAIT_STABLE()
+    
+    local char = LPLR.Character or LPLR.CharacterAdded:Wait()
+    local hrp  = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    
+    for i = 1, 12 do
+        hrp.CFrame = CFrame.new(targetPos)
+        RS.Heartbeat:Wait()
+    end
+end
+
+-- ── MÉTODO 2: Stepped — pasos de 70 studs con Heartbeat sync ─────────
+local function TP_STEPPED(targetPos)
+    local function getHRP()
+        local char = LPLR.Character or LPLR.CharacterAdded:Wait()
+        return char:FindFirstChild("HumanoidRootPart") or char:WaitForChild("HumanoidRootPart", 5)
+    end
+
+    local hrp = getHRP()
+    if not hrp then return end
+
+    -- Inicia siempre el proceso de stepped (seguridad máxima)
+    _TP_GET_SPAWN()
+    game:GetService("ReplicatedStorage").Remotes.Spawn:FireServer(_SPAWN_PT)
+
+    _TP_WAIT_STABLE()
+    hrp = getHRP()
+
+    -- Chunks de TP de 70 studs
+    local STEP = 70
+    local maxIter = 80
+
+    while maxIter > 0 do
+        maxIter = maxIter - 1
+        hrp = getHRP()
+        local current = hrp.Position
+        local remaining = (targetPos - current).Magnitude
+
+        if remaining < 5 then break end
+
+        local dir = (targetPos - current).Unit
+        local nextPos = current + dir * math.min(STEP, remaining)
+
+        hrp.CFrame = CFrame.new(nextPos)
+        RS.Heartbeat:Wait()
+        hrp.CFrame = CFrame.new(nextPos)
+        RS.Heartbeat:Wait()
+    end
+
+    -- Final snap (6 loops para asegurar posición final)
+    hrp = getHRP()
+    for i = 1, 6 do
+        if hrp then
+            hrp.CFrame = CFrame.new(targetPos)
+            RS.Heartbeat:Wait()
+        end
+    end
+end
+
+-- ── MÉTODO 3: Scooter — (en investigación, por ahora usa Stepped) ─────
+local function TP_SCOOTER(targetPos)
+    -- TODO: scooter-based bypass (mounts a vehicle for server-trusted movement)
+    -- Por ahora redirige a Stepped
+    TP_STEPPED(targetPos)
+end
+
+-- ── MÉTODO 4: Nearby — para distancias cortas (< 50 studs) ──────────
+local function TP_NEARBY(targetPos)
+    local char = LPLR.Character or LPLR.CharacterAdded:Wait()
+    local hrp  = char:WaitForChild("HumanoidRootPart")
+    local startPos = hrp.Position
+    local dist = (targetPos - startPos).Magnitude
+
+    _TP_GET_SPAWN()
+    game:GetService("ReplicatedStorage").Remotes.Spawn:FireServer(_SPAWN_PT)
+
     local waited = 0
     repeat
-        task.wait(0.05); waited += 0.05
-        local c = LPLR.Character or LPLR.CharacterAdded:Wait()
-        local h = c:FindFirstChild("HumanoidRootPart")
-        if h and (h.Position - _SPAWN_POS).Magnitude < 60 then break end
-    until waited > 3
-    -- Set CFrame multiple times to beat server rollback
-    for _ = 1, 5 do
-        local char = LPLR.Character or LPLR.CharacterAdded:Wait()
-        local hrp  = char:WaitForChild("HumanoidRootPart")
-        hrp.CFrame = CFrame.new(pos)
         task.wait(0.05)
+        waited += 0.05
+        char = LPLR.Character or LPLR.CharacterAdded:Wait()
+        hrp  = char:WaitForChild("HumanoidRootPart")
+    until (hrp.Position - _SPAWN_POS).Magnitude < 50 or waited > 3
+
+    hrp.CFrame = CFrame.new(targetPos)
+end
+
+-- ── DISPATCHER global ─────────────────────────────────────────────────
+local function BYPASS_TP(targetPos)
+    local char = LPLR.Character or LPLR.CharacterAdded:Wait()
+    local hrp  = char:FindFirstChild("HumanoidRootPart")
+    
+    if hrp then
+        local dist = (targetPos - hrp.Position).Magnitude
+        if dist < 50 then
+            TP_NEARBY(targetPos)
+            return
+        end
+    end
+
+    if TP_METHOD == "classic" then
+        TP_CLASSIC(targetPos)
+    elseif TP_METHOD == "scooter" then
+        TP_SCOOTER(targetPos)
+    else
+        TP_STEPPED(targetPos)
     end
 end
 
@@ -91,10 +226,153 @@ local CFG = {
         GRY = Color3.fromRGB(80, 80, 90),
         RED = Color3.fromRGB(255, 95, 87),
         YEL = Color3.fromRGB(255, 189, 46),
-        GRN = Color3.fromRGB(39, 201, 63)
+        GRN = Color3.fromRGB(39, 201, 63),
+        BTN = Color3.fromRGB(30, 30, 40)
     },
     SPD = 0.3
 }
+
+-- [ UI THEMES ]
+local UI_REGISTERED_ELEMENTS = {} -- tabla de todos los elementos vivos para repintar
+
+local UI_THEMES = {
+    ["Default"] = {
+        ACC = Color3.fromRGB(255, 120, 120),
+        BG  = Color3.fromRGB(15, 15, 20),
+        GRY = Color3.fromRGB(80, 80, 90),
+        BTN = Color3.fromRGB(30, 30, 40),
+    },
+    ["Snow White"] = {
+        ACC = Color3.fromRGB(220, 220, 235),
+        BG  = Color3.fromRGB(18, 18, 24),
+        GRY = Color3.fromRGB(130, 130, 145),
+    },
+    ["Sky Blue"] = {
+        ACC = Color3.fromRGB(80, 170, 255),
+        BG  = Color3.fromRGB(10, 18, 30),
+        GRY = Color3.fromRGB(70, 100, 130),
+    },
+    ["Void Black"] = {
+        ACC = Color3.fromRGB(200, 200, 200),
+        BG  = Color3.fromRGB(5, 5, 8),
+        GRY = Color3.fromRGB(60, 60, 70),
+    },
+    ["Coffee"] = {
+        ACC = Color3.fromRGB(185, 130, 90),
+        BG  = Color3.fromRGB(20, 14, 10),
+        GRY = Color3.fromRGB(100, 75, 55),
+    },
+    ["Gold"] = {
+        ACC = Color3.fromRGB(220, 175, 40),
+        BG  = Color3.fromRGB(18, 15, 5),
+        GRY = Color3.fromRGB(110, 90, 30),
+    },
+}
+
+-- Compara dos Color3 con tolerancia
+local function COL_MATCH(a, b, tol)
+    tol = tol or 0.06
+    return math.abs(a.R-b.R) < tol and math.abs(a.G-b.G) < tol and math.abs(a.B-b.B) < tol
+end
+
+local function APPLY_THEME(themeName)
+    local t = UI_THEMES[themeName]
+    if not t then return end
+
+    local oldACC = CFG.COL.ACC
+    local oldBG  = CFG.COL.BG
+    local oldGRY = CFG.COL.GRY
+    local oldBTN = CFG.COL.BTN
+
+    CFG.COL.ACC = t.ACC
+    CFG.COL.BG  = t.BG
+    CFG.COL.GRY = t.GRY
+    -- Derive BTN color: BG slightly lighter for button contrast
+    local r,g,b = t.BG.R, t.BG.G, t.BG.B
+    CFG.COL.BTN = Color3.new(math.min(r+0.08,1), math.min(g+0.08,1), math.min(b+0.1,1))
+
+    local roots = {game:GetService("CoreGui"), game:GetService("Players").LocalPlayer:FindFirstChild("PlayerGui")}
+    for _, root in ipairs(roots) do
+        local scr = root and root:FindFirstChild("CEN_V2")
+        if not scr then continue end
+
+        for _, obj in ipairs(scr:GetDescendants()) do
+            pcall(function()
+                -- Specific tag check (Name based) for 100% reliability
+                if obj.Name == "CEN_ACCENT_TEXT" then
+                    if obj:IsA("TextLabel") or obj:IsA("TextButton") then obj.TextColor3 = t.ACC end
+                    return -- priority match
+                end
+
+                -- BackgroundColor3
+                if obj:IsA("Frame") or obj:IsA("TextButton") or obj:IsA("ScrollingFrame") then
+                    local bc = obj.BackgroundColor3
+                    if COL_MATCH(bc, oldBG) then
+                        obj.BackgroundColor3 = t.BG
+                    elseif COL_MATCH(bc, oldACC) then
+                        obj.BackgroundColor3 = t.ACC
+                    elseif COL_MATCH(bc, oldGRY) then
+                        obj.BackgroundColor3 = t.GRY
+                    elseif oldBTN and COL_MATCH(bc, oldBTN) then
+                        obj.BackgroundColor3 = t.BTN
+                    end
+                end
+                -- TextColor3
+                if obj:IsA("TextLabel") or obj:IsA("TextButton") then
+                    local tc = obj.TextColor3
+                    if COL_MATCH(tc, oldACC) then
+                        obj.TextColor3 = t.ACC
+                    elseif COL_MATCH(tc, oldGRY) then
+                        obj.TextColor3 = t.GRY
+                    end
+                end
+                -- ImageColor3
+                if obj:IsA("ImageLabel") or obj:IsA("ImageButton") then
+                    local ic = obj.ImageColor3
+                    if COL_MATCH(ic, oldACC) then
+                        obj.ImageColor3 = t.ACC
+                    elseif COL_MATCH(ic, oldGRY) then
+                        obj.ImageColor3 = t.GRY
+                    end
+                end
+                -- UIStroke
+                if obj:IsA("UIStroke") then
+                    local sc = obj.Color
+                    if COL_MATCH(sc, oldACC) then
+                        obj.Color = t.ACC
+                    elseif COL_MATCH(sc, oldGRY) then
+                        obj.Color = t.GRY
+                    end
+                end
+                -- ScrollBarImageColor3
+                if obj:IsA("ScrollingFrame") then
+                    local sb = obj.ScrollBarImageColor3
+                    if COL_MATCH(sb, oldACC) then
+                        obj.ScrollBarImageColor3 = t.ACC
+                    end
+                end
+            end)
+        end
+    end
+end
+
+-- Aplica una fuente a todos los TextLabel/TextButton/TextBox del UI
+local function APPLY_FONT_UI(enumFont)
+    local root = game:GetService("Players").LocalPlayer:FindFirstChild("PlayerGui")
+    local scr  = root and root:FindFirstChild("CEN_V2")
+    if not scr then return end
+    for _, obj in ipairs(scr:GetDescendants()) do
+        pcall(function()
+            if obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox") then
+                obj.Font = enumFont
+            end
+        end)
+    end
+end
+
+local function REG(obj, prop, col)
+    table.insert(UI_REGISTERED_ELEMENTS, { obj = obj, prop = prop, col = col })
+end
 
 -- [ ESP CFG ]
 local ESP_CFG = {
@@ -108,8 +386,18 @@ local ESP_CFG = {
     Weapons = { Enabled = false, Color = Color3.new(1, 1, 1) },
     Dist    = { Enabled = false, Color = Color3.new(1, 1, 1) },
     Chams   = { Enabled = false, Color1 = Color3.fromRGB(119, 120, 255), Color2 = Color3.new(0,0,0), Thermal = false },
+    ToolCharms = { Enabled = false, Color1 = Color3.fromRGB(119, 120, 255), Color2 = Color3.new(0,0,0) },
     FontSize = 12,
-    Font = Enum.Font.GothamBold
+    Font = Enum.Font.GothamBold,
+    SilentAim = {
+        Enabled = false,
+        Keybind = nil,
+    },
+    Snapline = {
+        Enabled = false,
+        Color = Color3.fromRGB(245, 160, 55),
+        Thickness = 1
+    }
 }
 
 -- [ HELPERS ]
@@ -124,6 +412,15 @@ local function RND(OBJ, RAD)
     return CRN
 end
 
+local function RAND_STR(l)
+    l = l or math.random(12, 20)
+    local s = ""
+    for _ = 1, l do
+        s = s .. string.char(math.random(97, 122)) -- a-z
+    end
+    return s
+end
+
 local function STR(OBJ, COL, THK)
     local BRD = Instance.new("UIStroke", OBJ)
     BRD.Color = COL or CFG.COL.ACC
@@ -135,8 +432,8 @@ end
 -- [ ADVANCED COLOR PICKER ]
 local PICKER_DATA = { OPEN = false, CALLBACK = nil, COLOR = Color3.new(1,1,1), ALPHA = 0 }
 local function SETUP_COLOR_PICKER()
-    local GUI = Instance.new("ScreenGui", LPLR:WaitForChild("PlayerGui"))
-    GUI.Name = "CENTRAL_PICKER"
+    local GUI = Instance.new("ScreenGui", game:GetService("CoreGui"))
+    GUI.Name = RAND_STR()
     GUI.DisplayOrder = -900 -- Above menu but below game HUD
     GUI.IgnoreGuiInset = true
 
@@ -314,15 +611,15 @@ SETUP_COLOR_PICKER()
 
 -- [ NOTIFY ]
 local function NOTIFY(TITLE, MSG, TIME)
-    local N_GUI = PLRS.LocalPlayer:WaitForChild("PlayerGui"):FindFirstChild("CENTRAL_NOTIFS")
-    if not N_GUI then
-        N_GUI = Instance.new("ScreenGui")
-        N_GUI.Name = "CENTRAL_NOTIFS"
-        N_GUI.Parent = PLRS.LocalPlayer:WaitForChild("PlayerGui")
-        N_GUI.ResetOnSpawn = false
-        N_GUI.DisplayOrder = 10000
-        N_GUI.IgnoreGuiInset = true
+    if not _G.CENTRAL_NOTIFS_REF or not _G.CENTRAL_NOTIFS_REF.Parent then
+        _G.CENTRAL_NOTIFS_REF = Instance.new("ScreenGui")
+        _G.CENTRAL_NOTIFS_REF.Name = RAND_STR()
+        _G.CENTRAL_NOTIFS_REF.Parent = game:GetService("CoreGui")
+        _G.CENTRAL_NOTIFS_REF.ResetOnSpawn = false
+        _G.CENTRAL_NOTIFS_REF.DisplayOrder = 10000
+        _G.CENTRAL_NOTIFS_REF.IgnoreGuiInset = true
     end
+    local N_GUI = _G.CENTRAL_NOTIFS_REF
 
     local HOLDER = N_GUI:FindFirstChild("HOLDER")
     if not HOLDER then
@@ -355,13 +652,16 @@ local function NOTIFY(TITLE, MSG, TIME)
     BG.BackgroundTransparency = 1
     RND(BG, 10)
 
+    local _NF = (typeof(ESP_CFG and ESP_CFG.Font) == "EnumItem") and ESP_CFG.Font or Enum.Font.GothamBold
+    local _NM = (typeof(ESP_CFG and ESP_CFG.Font) == "EnumItem") and ESP_CFG.Font or Enum.Font.Gotham
+
     local T = Instance.new("TextLabel", FRM)
     T.Text = TITLE
     T.Size = UDim2.new(1, -20, 0, 20)
     T.Position = UDim2.new(0, 10, 0, 5)
     T.BackgroundTransparency = 1
     T.TextColor3 = CFG.COL.ACC
-    T.Font = Enum.Font.GothamBold
+    T.Font = _NF
     T.TextSize = 14
     T.TextXAlignment = Enum.TextXAlignment.Left
 
@@ -371,7 +671,7 @@ local function NOTIFY(TITLE, MSG, TIME)
     M.Position = UDim2.new(0, 10, 0, 25)
     M.BackgroundTransparency = 1
     M.TextColor3 = CFG.COL.TXT
-    M.Font = Enum.Font.Gotham
+    M.Font = _NM
     M.TextSize = 12
     M.TextWrapped = true
     M.TextXAlignment = Enum.TextXAlignment.Left
@@ -407,19 +707,40 @@ end
 local function ADD_BTN(PAG, TXT, CB)
     local BTN = Instance.new("TextButton", PAG)
     BTN.Size = UDim2.new(1, -10, 0, 35)
-    BTN.BackgroundColor3 = Color3.new(0, 0, 0)
-    BTN.BackgroundTransparency = 0.5
+    BTN.BackgroundColor3 = CFG.COL.BG
+    BTN.BackgroundTransparency = 0.82
     BTN.Text = TXT
     BTN.TextColor3 = CFG.COL.TXT
     BTN.Font = Enum.Font.GothamBold
-    BTN.TextSize = 14
-    RND(BTN, 8)
-    STR(BTN, CFG.COL.ACC, 1).Transparency = 0.8
+    BTN.TextSize = 13
+    BTN.AutoButtonColor = false
+    RND(BTN, 10)
+    
+    local STR_OBJ = STR(BTN, CFG.COL.ACC, 1.2)
+    STR_OBJ.Transparency = 0.8
+    STR_OBJ.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+    local GRAD = Instance.new("UIGradient", BTN)
+    GRAD.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.new(1,1,1)),
+        ColorSequenceKeypoint.new(1, Color3.new(0.8,0.8,0.8))
+    })
+    GRAD.Rotation = 45
+    GRAD.Transparency = NumberSequence.new(0.5)
+
+    BTN.MouseEnter:Connect(function()
+        TWN(BTN, {BackgroundTransparency = 0.7, BackgroundColor3 = CFG.COL.ACC}, 0.2)
+        TWN(STR_OBJ, {Transparency = 0.5}, 0.2)
+    end)
+    BTN.MouseLeave:Connect(function()
+        TWN(BTN, {BackgroundTransparency = 0.82, BackgroundColor3 = CFG.COL.BG}, 0.2)
+        TWN(STR_OBJ, {Transparency = 0.8}, 0.2)
+    end)
 
     BTN.MouseButton1Click:Connect(function()
-        TWN(BTN, {BackgroundColor3 = CFG.COL.ACC, TextColor3 = Color3.new(0, 0, 0)}, 0.1)
+        TWN(BTN, {BackgroundTransparency = 0.4, TextSize = 12}, 0.1)
         task.wait(0.1)
-        TWN(BTN, {BackgroundColor3 = Color3.new(0, 0, 0), TextColor3 = CFG.COL.TXT}, 0.2)
+        TWN(BTN, {BackgroundTransparency = 0.7, TextSize = 13}, 0.1)
         if CB then CB() end
     end)
     return BTN
@@ -428,13 +749,24 @@ end
 local function ADD_INP(PAG, PH, DEF, CB)
     local FRM = Instance.new("TextButton", PAG)
     FRM.Size = UDim2.new(1, -10, 0, 35)
-    FRM.BackgroundColor3 = Color3.new(0, 0, 0)
-    FRM.BackgroundTransparency = 0.5
+    FRM.BackgroundColor3 = CFG.COL.BG
+    FRM.BackgroundTransparency = 0.82
     FRM.Text = ""
     FRM.AutoButtonColor = false
     FRM.Active = true
-    RND(FRM, 8)
-    STR(FRM, CFG.COL.GRY, 1)
+    RND(FRM, 10)
+    
+    local INP_STR = STR(FRM, CFG.COL.ACC, 1.2)
+    INP_STR.Transparency = 0.85
+    INP_STR.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+    local INP_GRAD = Instance.new("UIGradient", FRM)
+    INP_GRAD.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.new(1,1,1)),
+        ColorSequenceKeypoint.new(1, Color3.new(0.8,0.8,0.8))
+    })
+    INP_GRAD.Rotation = 45
+    INP_GRAD.Transparency = NumberSequence.new(0.5)
 
     local BOX = Instance.new("TextBox", FRM)
     BOX.Size = UDim2.new(1, -20, 1, 0)
@@ -457,8 +789,8 @@ end
 local function ADD_TEXTAREA(PAG, PH, DEF, HEIGHT, CB)
     local FRM = Instance.new("TextButton", PAG)
     FRM.Size = UDim2.new(1, -10, 0, HEIGHT or 100)
-    FRM.BackgroundColor3 = Color3.new(0, 0, 0)
-    FRM.BackgroundTransparency = 0.5
+    FRM.BackgroundColor3 = CFG.COL.BG
+    FRM.BackgroundTransparency = 0.4
     FRM.Text = ""
     FRM.AutoButtonColor = false
     FRM.Active = true
@@ -490,8 +822,8 @@ end
 local function ADD_DRP(PAG, TTL, CB)
     local FRM = Instance.new("Frame", PAG)
     FRM.Size = UDim2.new(1, -10, 0, 35)
-    FRM.BackgroundColor3 = Color3.new(0, 0, 0)
-    FRM.BackgroundTransparency = 0.5
+    FRM.BackgroundColor3 = CFG.COL.BG
+    FRM.BackgroundTransparency = 0.4
     FRM.ClipsDescendants = true
     FRM.ZIndex = 5
     RND(FRM, 8)
@@ -578,8 +910,8 @@ local function ADD_TGL(PAG, TXT, DEF, CB)
     
     local FRM = Instance.new("Frame", PAG)
     FRM.Size = UDim2.new(1, -10, 0, 35)
-    FRM.BackgroundColor3 = Color3.new(0, 0, 0)
-    FRM.BackgroundTransparency = 0.5
+    FRM.BackgroundColor3 = CFG.COL.BG
+    FRM.BackgroundTransparency = 0.4
     RND(FRM, 8)
     STR(FRM, CFG.COL.GRY, 1)
 
@@ -625,6 +957,136 @@ local function ADD_TGL(PAG, TXT, DEF, CB)
     return TGL
 end
 
+local function ADD_TGL_KB(PAG, TXT, DEF, DEF_KB, CB)
+    local TGL = { VAL = DEF or false, KB = DEF_KB }
+    local IS_PC = not game:GetService("UserInputService").TouchEnabled
+    _G.CEN_BINDS = _G.CEN_BINDS or {}
+
+    local FRM = Instance.new("Frame", PAG)
+    FRM.Size = UDim2.new(1, -10, 0, 30)
+    FRM.BackgroundTransparency = 1
+
+    local LBL = Instance.new("TextLabel", FRM)
+    LBL.Size = UDim2.new(1, -85, 1, 0)
+    LBL.Position = UDim2.new(0, 5, 0, 0)
+    LBL.BackgroundTransparency = 1
+    LBL.Text = TXT
+    LBL.TextColor3 = CFG.COL.TXT
+    LBL.Font = Enum.Font.GothamMedium
+    LBL.TextSize = 13
+    LBL.TextXAlignment = Enum.TextXAlignment.Left
+
+    local BTN = Instance.new("TextButton", FRM)
+    BTN.Size = UDim2.new(0, 35, 0, 18)
+    BTN.Position = UDim2.new(1, -35, 0.5, -9)
+    BTN.BackgroundColor3 = TGL.VAL and CFG.COL.ACC or CFG.COL.GRY
+    BTN.Text = ""
+    RND(BTN, 10)
+
+    local IND = Instance.new("Frame", BTN)
+    IND.Size = UDim2.new(0, 14, 0, 14)
+    IND.Position = TGL.VAL and UDim2.new(1, -16, 0.5, -7) or UDim2.new(0, 2, 0.5, -7)
+    IND.BackgroundColor3 = Color3.new(1, 1, 1)
+    RND(IND, 10)
+
+    local KB_LISTENING = false
+    if IS_PC then
+        local KB_BOX = Instance.new("TextButton", FRM)
+        KB_BOX.Size = UDim2.new(0, 32, 0, 20)
+        KB_BOX.Position = UDim2.new(1, -75, 0.5, -10)
+        KB_BOX.BackgroundColor3 = CFG.COL.BG
+        KB_BOX.BackgroundTransparency = 0.82
+        KB_BOX.BorderSizePixel = 0
+        KB_BOX.Text = TGL.KB and tostring(TGL.KB):gsub("Enum.KeyCode.", "") or "—"
+        KB_BOX.TextColor3 = CFG.COL.GRY
+        KB_BOX.Font = Enum.Font.GothamBold
+        KB_BOX.TextSize = 10
+        KB_BOX.ZIndex = 6
+        KB_BOX.AutoButtonColor = false
+        RND(KB_BOX, 8)
+        
+        local KB_STR = STR(KB_BOX, CFG.COL.ACC, 1.2)
+        KB_STR.Transparency = 0.8
+        KB_STR.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+        local KB_GRAD = Instance.new("UIGradient", KB_BOX)
+        KB_GRAD.Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, Color3.new(1,1,1)),
+            ColorSequenceKeypoint.new(1, Color3.new(0.8,0.8,0.8))
+        })
+        KB_GRAD.Rotation = 45
+        KB_GRAD.Transparency = NumberSequence.new(0.5)
+
+        KB_BOX.MouseEnter:Connect(function()
+            TWN(KB_BOX, {BackgroundTransparency = 0.6, BackgroundColor3 = CFG.COL.ACC, TextColor3 = Color3.new(0,0,0)}, 0.2)
+            TWN(KB_STR, {Transparency = 0.4}, 0.2)
+        end)
+        KB_BOX.MouseLeave:Connect(function()
+            TWN(KB_BOX, {BackgroundTransparency = 0.82, BackgroundColor3 = CFG.COL.BG, TextColor3 = CFG.COL.GRY}, 0.2)
+            TWN(KB_STR, {Transparency = 0.8}, 0.2)
+        end)
+
+        KB_BOX.MouseButton1Click:Connect(function()
+            if KB_LISTENING then return end
+            KB_LISTENING = true
+            KB_BOX.Text = "..."
+            KB_BOX.TextColor3 = CFG.COL.YEL
+            TWN(KB_BOX, {BackgroundColor3 = Color3.fromRGB(50, 45, 20), BackgroundTransparency = 0.5, TextSize = 8}, 0.1)
+
+            local conn
+            conn = game:GetService("UserInputService").InputBegan:Connect(function(inp, gpe)
+                if gpe then return end
+                if inp.UserInputType ~= Enum.UserInputType.Keyboard then return end
+                conn:Disconnect()
+                KB_LISTENING = false
+
+                if inp.KeyCode == Enum.KeyCode.Escape then
+                    TGL.KB = nil
+                    KB_BOX.Text = "—"
+                    KB_BOX.TextColor3 = CFG.COL.GRY
+                    TWN(KB_BOX, {BackgroundColor3 = CFG.COL.BTN}, 0.1)
+                    return
+                end
+
+                TGL.KB = inp.KeyCode
+                local name = tostring(inp.KeyCode):gsub("Enum.KeyCode.", "")
+                if #name > 4 then name = name:sub(1,4) end
+                KB_BOX.Text = name
+                KB_BOX.TextColor3 = CFG.COL.TXT
+                TWN(KB_BOX, {BackgroundColor3 = CFG.COL.BG, BackgroundTransparency = 0.82, TextSize = 10}, 0.1)
+            end)
+        end)
+
+        local bind_conn = game:GetService("UserInputService").InputBegan:Connect(function(inp, gpe)
+            if gpe or KB_LISTENING or TGL.KB == nil then return end
+            if inp.UserInputType == Enum.UserInputType.Keyboard and inp.KeyCode == TGL.KB then
+                BTN.BackgroundColor3 = TGL.VAL and CFG.COL.ACC or CFG.COL.GRY -- toggle state
+                TGL.VAL = not TGL.VAL
+                TWN(BTN, {BackgroundColor3 = TGL.VAL and CFG.COL.ACC or CFG.COL.GRY}, 0.2)
+                TWN(IND, {Position = TGL.VAL and UDim2.new(1, -16, 0.5, -7) or UDim2.new(0, 2, 0.5, -7)}, 0.2)
+                if CB then CB(TGL.VAL, TGL.KB) end
+            end
+        end)
+        table.insert(_G.CEN_BINDS, bind_conn)
+    end
+
+    local function UPD(dont_callback)
+        TWN(BTN, {BackgroundColor3 = TGL.VAL and CFG.COL.ACC or CFG.COL.GRY}, 0.2)
+        TWN(IND, {Position = TGL.VAL and UDim2.new(1, -16, 0.5, -7) or UDim2.new(0, 2, 0.5, -7)}, 0.2)
+        if CB and not dont_callback then CB(TGL.VAL, TGL.KB) end
+    end
+
+    BTN.MouseButton1Click:Connect(function()
+        TGL.VAL = not TGL.VAL
+        UPD()
+    end)
+    function TGL:SET(v)
+        self.VAL = v
+        UPD(true)
+    end
+    return TGL
+end
+
 local function ADD_SLD(PAG, TXT, MIN, MAX, DEF, CB, SFX)
     local SLD = { VAL = DEF or MIN }
     local suffix = SFX or ""
@@ -632,22 +1094,19 @@ local function ADD_SLD(PAG, TXT, MIN, MAX, DEF, CB, SFX)
     local FRM = Instance.new("TextButton", PAG)
     FRM.Name = TXT .. "_Slider"
     FRM.Size = UDim2.new(1, -10, 0, 45)
-    FRM.BackgroundColor3 = Color3.new(0, 0, 0)
-    FRM.BackgroundTransparency = 0.5
+    FRM.BackgroundTransparency = 1
     FRM.Text = ""
     FRM.AutoButtonColor = false
     FRM.Active = true
-    RND(FRM, 8)
-    STR(FRM, CFG.COL.GRY, 1)
 
     local LBL = Instance.new("TextLabel", FRM)
     LBL.Size = UDim2.new(1, -60, 0, 20)
-    LBL.Position = UDim2.new(0, 10, 0, 5)
+    LBL.Position = UDim2.new(0, 5, 0, 5)
     LBL.BackgroundTransparency = 1
     LBL.Text = TXT
     LBL.TextColor3 = CFG.COL.TXT
-    LBL.Font = Enum.Font.GothamBold
-    LBL.TextSize = 12
+    LBL.Font = Enum.Font.GothamMedium
+    LBL.TextSize = 13
     LBL.TextXAlignment = Enum.TextXAlignment.Left
 
     local VAL_LBL = Instance.new("TextLabel", FRM)
@@ -661,8 +1120,8 @@ local function ADD_SLD(PAG, TXT, MIN, MAX, DEF, CB, SFX)
     VAL_LBL.TextXAlignment = Enum.TextXAlignment.Right
 
     local BAR_BG = Instance.new("Frame", FRM)
-    BAR_BG.Size = UDim2.new(1, -20, 0, 6)
-    BAR_BG.Position = UDim2.new(0, 10, 0, 32)
+    BAR_BG.Size = UDim2.new(1, -10, 0, 6)
+    BAR_BG.Position = UDim2.new(0, 5, 0, 32)
     BAR_BG.BackgroundColor3 = CFG.COL.GRY
     BAR_BG.BackgroundTransparency = 0.5
     BAR_BG.Active = true -- Block input from background
@@ -732,8 +1191,8 @@ local function ADD_CLR(PAG, TXT, DEF, CB)
     
     local FRM = Instance.new("Frame", PAG)
     FRM.Size = UDim2.new(1, -10, 0, 35)
-    FRM.BackgroundColor3 = Color3.new(0, 0, 0)
-    FRM.BackgroundTransparency = 0.5
+    FRM.BackgroundColor3 = CFG.COL.BG
+    FRM.BackgroundTransparency = 0.4
     RND(FRM, 8)
     STR(FRM, CFG.COL.GRY, 1)
 
@@ -772,7 +1231,7 @@ local ESP_HOLDER = Instance.new("ScreenGui")
 ESP_HOLDER.Name = "ESP_HOLDER"
 ESP_HOLDER.IgnoreGuiInset = true
 ESP_HOLDER.DisplayOrder = -1100
-ESP_HOLDER.Parent = LPLR:WaitForChild("PlayerGui")
+ESP_HOLDER.Parent = game:GetService("CoreGui")
 
 local CACHE = {}
 
@@ -789,7 +1248,8 @@ local function MK_ESP(p)
         BAR_FL = Instance.new("Frame"),
         BAR_GRAD = Instance.new("UIGradient"),
         HEALTH_TXT = Instance.new("TextLabel"),
-        CORNERS = {}
+        CORNERS = {},
+        CHAM = nil
     }
     
     E.FRM.BackgroundTransparency = 1
@@ -818,27 +1278,33 @@ local function MK_ESP(p)
         E.CORNERS[i] = MK_C(E.FRM)
     end
     
+    local function _SAFE_FONT(lbl, sz)
+        if typeof(ESP_CFG.Font) == "Font" then
+            lbl.FontFace = ESP_CFG.Font
+        else
+            lbl.Font = (typeof(ESP_CFG.Font) == "EnumItem") and ESP_CFG.Font or Enum.Font.GothamBold
+        end
+        lbl.TextSize = sz or ESP_CFG.FontSize
+    end
+
     E.NAME.Parent = E.FRM
     E.NAME.BackgroundTransparency = 1
     E.NAME.TextColor3 = Color3.new(1,1,1)
-    E.NAME.Font = ESP_CFG.Font
-    E.NAME.TextSize = ESP_CFG.FontSize
+    _SAFE_FONT(E.NAME, ESP_CFG.FontSize)
     E.NAME.TextStrokeTransparency = 0.5
     E.NAME.TextYAlignment = Enum.TextYAlignment.Bottom
     
     E.DIST.Parent = E.FRM
     E.DIST.BackgroundTransparency = 1
     E.DIST.TextColor3 = Color3.new(1,1,1)
-    E.DIST.Font = ESP_CFG.Font
-    E.DIST.TextSize = ESP_CFG.FontSize - 1
+    _SAFE_FONT(E.DIST, ESP_CFG.FontSize - 1)
     E.DIST.TextStrokeTransparency = 0.5
     E.DIST.TextYAlignment = Enum.TextYAlignment.Top
 
     E.WEAP.Parent = E.FRM
     E.WEAP.BackgroundTransparency = 1
     E.WEAP.TextColor3 = Color3.new(1,1,1)
-    E.WEAP.Font = ESP_CFG.Font
-    E.WEAP.TextSize = ESP_CFG.FontSize - 1
+    _SAFE_FONT(E.WEAP, ESP_CFG.FontSize - 1)
     E.WEAP.TextStrokeTransparency = 0.5
     E.WEAP.TextYAlignment = Enum.TextYAlignment.Top
     
@@ -858,8 +1324,7 @@ local function MK_ESP(p)
     E.HEALTH_TXT.Parent = E.FRM
     E.HEALTH_TXT.BackgroundTransparency = 1
     E.HEALTH_TXT.TextColor3 = Color3.new(1,1,1)
-    E.HEALTH_TXT.Font = ESP_CFG.Font
-    E.HEALTH_TXT.TextSize = ESP_CFG.FontSize - 1
+    _SAFE_FONT(E.HEALTH_TXT, ESP_CFG.FontSize - 1)
     E.HEALTH_TXT.TextStrokeTransparency = 0.5
     E.HEALTH_TXT.TextStrokeTransparency = 0.5
     E.HEALTH_TXT.TextXAlignment = Enum.TextXAlignment.Center
@@ -870,154 +1335,170 @@ end
 
 local function UPD_ESP()
     for _, p in pairs(PLRS:GetPlayers()) do
-        if p == LPLR then continue end
-        local E = CACHE[p] or MK_ESP(p)
-        local C = p.Character
-        local H = C and C:FindFirstChild("HumanoidRootPart")
-        local HUM = C and C:FindFirstChildOfClass("Humanoid")
-        
-        if ESP_CFG.Enabled and H and HUM and HUM.Health > 0 then
-            local pos, vis = workspace.CurrentCamera:WorldToViewportPoint(H.Position)
-            local dist = (workspace.CurrentCamera.CFrame.Position - H.Position).Magnitude
+        pcall(function()
+            if p == LPLR then return end
+            local E = CACHE[p] or MK_ESP(p)
+            local C = p.Character
             
-            if vis and dist <= ESP_CFG.MaxDist then
-                E.FRM.Visible = true
-                
-                local s_y = (H.Size.Y * 2 * workspace.CurrentCamera.ViewportSize.Y) / (pos.Z * 2)
-                local s_x = s_y * 0.75
-                local x, y = pos.X - s_x/2, pos.Y - s_y/2
-                
-                -- Bounding & Corner Boxes
-                local box_en = ESP_CFG.Boxes.Enabled
-                local corn_en = ESP_CFG.Corners.Enabled
-                local fill_en = ESP_CFG.Filled.Enabled
-                
-                E.BOX.Visible = (box_en or fill_en)
-                E.BOX.Position = UDim2.new(0, x, 0, y)
-                E.BOX.Size = UDim2.new(0, s_x, 0, s_y)
-                
-                E.OUT.Enabled = box_en and not corn_en
-                E.OUT.Color = ESP_CFG.Boxes.Color
-                
-                E.BOX.BackgroundTransparency = fill_en and (1 - ESP_CFG.Filled.Alpha) or 1
-                E.BOX_GRAD.Enabled = fill_en
-                E.BOX_GRAD.Color = ColorSequence.new(ESP_CFG.Filled.Color1, ESP_CFG.Filled.Color2)
-                
-                if ESP_CFG.Boxes.Animated and (fill_en or box_en) then
-                    E.BOX_GRAD.Rotation = (tick() * 100) % 360
-                end
+            -- Dynamic cleanup if character is missing
+            if not C then
+                 if E.CHAM then E.CHAM:Destroy(); E.CHAM = nil end
+                 E.FRM.Visible = false
+                 return
+            end
 
-                -- Corners
-                for i = 1, 8 do E.CORNERS[i].Visible = corn_en end
-                if corn_en then
-                    local clr = ESP_CFG.Corners.Color
-                    local thk = 1.5
-                    local len = s_x / 4
-                    -- Top Left
-                    E.CORNERS[1].Position = UDim2.new(0, x, 0, y); E.CORNERS[1].Size = UDim2.new(0, len, 0, thk)
-                    E.CORNERS[2].Position = UDim2.new(0, x, 0, y); E.CORNERS[2].Size = UDim2.new(0, thk, 0, len)
-                    -- Top Right
-                    E.CORNERS[3].Position = UDim2.new(0, x + s_x - len, 0, y); E.CORNERS[3].Size = UDim2.new(0, len, 0, thk)
-                    E.CORNERS[4].Position = UDim2.new(0, x + s_x - thk, 0, y); E.CORNERS[4].Size = UDim2.new(0, thk, 0, len)
-                    -- Bottom Left
-                    E.CORNERS[5].Position = UDim2.new(0, x, 0, y + s_y - thk); E.CORNERS[5].Size = UDim2.new(0, len, 0, thk)
-                    E.CORNERS[6].Position = UDim2.new(0, x, 0, y + s_y - len); E.CORNERS[6].Size = UDim2.new(0, thk, 0, len)
-                    -- Bottom Right
-                    E.CORNERS[7].Position = UDim2.new(0, x + s_x - len, 0, y + s_y - thk); E.CORNERS[7].Size = UDim2.new(0, len, 0, thk)
-                    E.CORNERS[8].Position = UDim2.new(0, x + s_x - thk, 0, y + s_y - len); E.CORNERS[8].Size = UDim2.new(0, thk, 0, len)
-                    for i = 1, 8 do E.CORNERS[i].BackgroundColor3 = clr end
-                end
-                
-                local function SET_F(lbl, sz)
-                    if typeof(ESP_CFG.Font) == "Font" then
-                        lbl.FontFace = ESP_CFG.Font
-                    else
-                        lbl.Font = ESP_CFG.Font
-                    end
-                    lbl.TextSize = sz or ESP_CFG.FontSize
-                end
-
-                -- Name
-                E.NAME.Visible = ESP_CFG.Names.Enabled
-                E.NAME.Position = UDim2.new(0, x - 50, 0, y - (ESP_CFG.FontSize + 4))
-                E.NAME.Size = UDim2.new(0, s_x + 100, 0, ESP_CFG.FontSize)
-                E.NAME.Text = p.Name
-                E.NAME.TextColor3 = ESP_CFG.Names.Color
-                SET_F(E.NAME)
-
-                -- Health
-                local hp_per = math.clamp(HUM.Health / HUM.MaxHealth, 0, 1)
-                E.BAR_BG.Visible = ESP_CFG.Health.Bar
-                E.BAR_BG.Position = UDim2.new(0, x - 6, 0, y)
-                E.BAR_BG.Size = UDim2.new(0, 3, 0, s_y)
-                E.BAR_FL.Size = UDim2.new(1, 0, hp_per, 0)
-                E.BAR_FL.Position = UDim2.new(0, 0, 1 - hp_per, 0)
-                
-                if ESP_CFG.Health.Dynamic then
-                    E.BAR_FL.BackgroundColor3 = Color3.fromHSV(hp_per * 0.35, 1, 1)
-                    E.BAR_GRAD.Enabled = false
-                elseif ESP_CFG.Health.Bar then
-                    E.BAR_FL.BackgroundColor3 = Color3.new(1, 1, 1)
-                    E.BAR_GRAD.Enabled = true
-                    E.BAR_GRAD.Transparency = NumberSequence.new(0)
-                    E.BAR_GRAD.Color = ColorSequence.new(ESP_CFG.Health.Color1, ESP_CFG.Health.Color2)
-                else
-                    E.BAR_GRAD.Enabled = false
-                end
-
-                E.HEALTH_TXT.Visible = ESP_CFG.Health.Text
-                E.HEALTH_TXT.Position = UDim2.new(0, x - 40, 0, y + s_y * (1-hp_per) - 10)
-                E.HEALTH_TXT.Size = UDim2.new(0, 30, 0, 12)
-                E.HEALTH_TXT.Text = math.floor(HUM.Health)
-                SET_F(E.HEALTH_TXT, ESP_CFG.FontSize - 1)
-                
-                -- Weapon & Dist
-                E.WEAP.Visible = ESP_CFG.Weapons.Enabled
-                local tool = C:FindFirstChildOfClass("Tool")
-                E.WEAP.Text = tool and tool.Name or "None"
-                E.WEAP.Position = UDim2.new(0, x - 50, 0, y + s_y + 2)
-                E.WEAP.Size = UDim2.new(0, s_x + 100, 0, ESP_CFG.FontSize)
-                E.WEAP.TextColor3 = ESP_CFG.Weapons.Color
-                SET_F(E.WEAP, ESP_CFG.FontSize - 1)
-
-                E.DIST.Visible = ESP_CFG.Dist.Enabled
-                E.DIST.Position = UDim2.new(0, x - 50, 0, y + s_y + (ESP_CFG.Weapons.Enabled and ESP_CFG.FontSize + 2 or 2))
-                E.DIST.Size = UDim2.new(0, s_x + 100, 0, ESP_CFG.FontSize)
-                E.DIST.Text = math.floor(dist) .. "st"
-                E.DIST.TextColor3 = ESP_CFG.Dist.Color
-                SET_F(E.DIST, ESP_CFG.FontSize - 1)
-                -- Chams (Persistent in Character)
-                local cham = C:FindFirstChild("CEN_CHAM")
+            local H = C:FindFirstChild("HumanoidRootPart")
+            local HUM = C:FindFirstChildOfClass("Humanoid")
+            
+            -- Chams Logic (Highly Optimized Caching)
+            if C and HUM and HUM.Health > 0 then
                 if ESP_CFG.Chams.Enabled then
-                    if not cham then
-                        cham = Instance.new("Highlight")
-                        cham.Name = "CEN_CHAM"
-                        cham.Parent = C
-                        cham.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                    if not E.CHAM or E.CHAM.Parent ~= C then
+                        if E.CHAM then pcall(function() E.CHAM:Destroy() end) end
+                        E.CHAM = Instance.new("Highlight")
+                        E.CHAM.Name = "CEN_CHAM"
+                        E.CHAM.Adornee = C
+                        E.CHAM.Parent = C
+                        E.CHAM.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
                     end
-                    cham.FillColor = ESP_CFG.Chams.Color1
-                    cham.OutlineColor = ESP_CFG.Chams.Color2
-                    cham.OutlineTransparency = 0
+                    
+                    E.CHAM.FillColor = ESP_CFG.Chams.Color1
+                    E.CHAM.OutlineColor = ESP_CFG.Chams.Color2
+                    E.CHAM.OutlineTransparency = 0
+                    
                     if ESP_CFG.Chams.Thermal then
-                        cham.FillTransparency = 0.6 + math.sin(tick() * 5) * 0.3
+                        E.CHAM.FillTransparency = 0.6 + math.sin(tick() * 5) * 0.3
                     else
-                        cham.FillTransparency = 0.5
+                        E.CHAM.FillTransparency = 0.5
                     end
-                else
-                    if cham then cham:Destroy() end
+                elseif E.CHAM then
+                    E.CHAM:Destroy()
+                    E.CHAM = nil
                 end
             else
-                E.FRM.Visible = false
-                local cham = C and C:FindFirstChild("CEN_CHAM")
-                if cham then cham:Destroy() end
+                if E.CHAM then E.CHAM:Destroy(); E.CHAM = nil end
             end
-        else
-            if E then 
-                E.FRM.Visible = false 
+
+            -- 2D Visuals Logic
+            if ESP_CFG.Enabled and H and HUM and HUM.Health > 0 then
+                local pos, vis = workspace.CurrentCamera:WorldToViewportPoint(H.Position)
+                local dist = (workspace.CurrentCamera.CFrame.Position - H.Position).Magnitude
+                
+                if vis and dist <= ESP_CFG.MaxDist then
+                    E.FRM.Visible = true
+                    
+                    local s_y = (H.Size.Y * 2 * workspace.CurrentCamera.ViewportSize.Y) / (pos.Z * 2)
+                    local s_x = s_y * 0.75
+                    local x, y = pos.X - s_x/2, pos.Y - s_y/2
+                    
+                    -- Bounding & Corner Boxes
+                    local box_en = ESP_CFG.Boxes.Enabled
+                    local corn_en = ESP_CFG.Corners.Enabled
+                    local fill_en = ESP_CFG.Filled.Enabled
+                    
+                    E.BOX.Visible = (box_en or fill_en)
+                    E.BOX.Position = UDim2.new(0, x, 0, y)
+                    E.BOX.Size = UDim2.new(0, s_x, 0, s_y)
+                    
+                    E.OUT.Enabled = box_en and not corn_en
+                    E.OUT.Color = ESP_CFG.Boxes.Color
+                    
+                    E.BOX.BackgroundTransparency = fill_en and (1 - ESP_CFG.Filled.Alpha) or 1
+                    E.BOX_GRAD.Enabled = fill_en
+                    E.BOX_GRAD.Color = ColorSequence.new(ESP_CFG.Filled.Color1, ESP_CFG.Filled.Color2)
+                    
+                    if ESP_CFG.Boxes.Animated and (fill_en or box_en) then
+                        E.BOX_GRAD.Rotation = (tick() * 100) % 360
+                    end
+
+                    -- Corners
+                    for i = 1, 8 do E.CORNERS[i].Visible = corn_en end
+                    if corn_en then
+                        local clr = ESP_CFG.Corners.Color
+                        local thk = 1.5
+                        local len = s_x / 4
+                        -- Top Left
+                        E.CORNERS[1].Position = UDim2.new(0, x, 0, y); E.CORNERS[1].Size = UDim2.new(0, len, 0, thk)
+                        E.CORNERS[2].Position = UDim2.new(0, x, 0, y); E.CORNERS[2].Size = UDim2.new(0, thk, 0, len)
+                        -- Top Right
+                        E.CORNERS[3].Position = UDim2.new(0, x + s_x - len, 0, y); E.CORNERS[3].Size = UDim2.new(0, len, 0, thk)
+                        E.CORNERS[4].Position = UDim2.new(0, x + s_x - thk, 0, y); E.CORNERS[4].Size = UDim2.new(0, thk, 0, len)
+                        -- Bottom Left
+                        E.CORNERS[5].Position = UDim2.new(0, x, 0, y + s_y - thk); E.CORNERS[5].Size = UDim2.new(0, len, 0, thk)
+                        E.CORNERS[6].Position = UDim2.new(0, x, 0, y + s_y - len); E.CORNERS[6].Size = UDim2.new(0, thk, 0, len)
+                        -- Bottom Right
+                        E.CORNERS[7].Position = UDim2.new(0, x + s_x - len, 0, y + s_y - thk); E.CORNERS[7].Size = UDim2.new(0, len, 0, thk)
+                        E.CORNERS[8].Position = UDim2.new(0, x + s_x - thk, 0, y + s_y - len); E.CORNERS[8].Size = UDim2.new(0, thk, 0, len)
+                        for i = 1, 8 do E.CORNERS[i].BackgroundColor3 = clr end
+                    end
+                    
+                    local function SET_F(lbl, sz)
+                        if typeof(ESP_CFG.Font) == "Font" then
+                            lbl.FontFace = ESP_CFG.Font
+                        else
+                            lbl.Font = ESP_CFG.Font
+                        end
+                        lbl.TextSize = sz or ESP_CFG.FontSize
+                    end
+
+                    -- Name
+                    E.NAME.Visible = ESP_CFG.Names.Enabled
+                    E.NAME.Position = UDim2.new(0, x - 50, 0, y - (ESP_CFG.FontSize + 4))
+                    E.NAME.Size = UDim2.new(0, s_x + 100, 0, ESP_CFG.FontSize)
+                    E.NAME.Text = p.Name
+                    E.NAME.TextColor3 = ESP_CFG.Names.Color
+                    SET_F(E.NAME)
+
+                    -- Health
+                    local hp_per = math.clamp(HUM.Health / HUM.MaxHealth, 0, 1)
+                    E.BAR_BG.Visible = ESP_CFG.Health.Bar
+                    E.BAR_BG.Position = UDim2.new(0, x - 6, 0, y)
+                    E.BAR_BG.Size = UDim2.new(0, 3, 0, s_y)
+                    E.BAR_FL.Size = UDim2.new(1, 0, hp_per, 0)
+                    E.BAR_FL.Position = UDim2.new(0, 0, 1 - hp_per, 0)
+                    
+                    if ESP_CFG.Health.Dynamic then
+                        E.BAR_FL.BackgroundColor3 = Color3.fromHSV(hp_per * 0.35, 1, 1)
+                        E.BAR_GRAD.Enabled = false
+                    elseif ESP_CFG.Health.Bar then
+                        E.BAR_FL.BackgroundColor3 = Color3.new(1, 1, 1)
+                        E.BAR_GRAD.Enabled = true
+                        E.BAR_GRAD.Transparency = NumberSequence.new(0)
+                        E.BAR_GRAD.Color = ColorSequence.new(ESP_CFG.Health.Color1, ESP_CFG.Health.Color2)
+                    else
+                        E.BAR_GRAD.Enabled = false
+                    end
+
+                    E.HEALTH_TXT.Visible = ESP_CFG.Health.Text
+                    E.HEALTH_TXT.Position = UDim2.new(0, x - 40, 0, y + s_y * (1-hp_per) - 10)
+                    E.HEALTH_TXT.Size = UDim2.new(0, 30, 0, 12)
+                    E.HEALTH_TXT.Text = math.floor(HUM.Health)
+                    SET_F(E.HEALTH_TXT, ESP_CFG.FontSize - 1)
+                    
+                    -- Weapon & Dist
+                    E.WEAP.Visible = ESP_CFG.Weapons.Enabled
+                    local tool = C:FindFirstChildOfClass("Tool")
+                    E.WEAP.Text = tool and tool.Name or "None"
+                    E.WEAP.Position = UDim2.new(0, x - 50, 0, y + s_y + 2)
+                    E.WEAP.Size = UDim2.new(0, s_x + 100, 0, ESP_CFG.FontSize)
+                    E.WEAP.TextColor3 = ESP_CFG.Weapons.Color
+                    SET_F(E.WEAP, ESP_CFG.FontSize - 1)
+
+                    E.DIST.Visible = ESP_CFG.Dist.Enabled
+                    E.DIST.Position = UDim2.new(0, x - 50, 0, y + s_y + (ESP_CFG.Weapons.Enabled and ESP_CFG.FontSize + 2 or 2))
+                    E.DIST.Size = UDim2.new(0, s_x + 100, 0, ESP_CFG.FontSize)
+                    E.DIST.Text = math.floor(dist) .. "st"
+                    E.DIST.TextColor3 = ESP_CFG.Dist.Color
+                    SET_F(E.DIST, ESP_CFG.FontSize - 1)
+                else
+                    E.FRM.Visible = false
+                end
+            else
+                if E then 
+                    E.FRM.Visible = false 
+                end
             end
-            local cham = C and C:FindFirstChild("CEN_CHAM")
-            if cham then cham:Destroy() end
-        end
+        end)
     end
 end
 
@@ -1030,12 +1511,368 @@ PLRS.PlayerRemoving:Connect(function(p)
     end
 end)
 
+-- [ TOOL CHARMS ]
+do
+    local Players = game:GetService("Players")
+    local RunService = game:GetService("RunService")
+    local LocalPlayer = Players.LocalPlayer
+
+    --====================================================
+    -- SETTINGS
+    --====================================================
+    local TRANSPARENCY_MIN   = 0.18
+    local TRANSPARENCY_MAX   = 0.42
+    local ANIM_SPEED         = 2.4
+    local USE_HIGHLIGHT      = true
+    local ONLY_WHEN_EQUIPPED = true
+    local ONLY_HANDLE = false
+
+    --====================================================
+    -- STATE
+    --====================================================
+    local trackedTools = {}
+    local partCache = {}
+    local highlightCache = {}
+    local isEnabledCache = false
+
+    --====================================================
+    -- HELPERS
+    --====================================================
+    local function isToolEquipped(tool)
+        return tool and tool.Parent == LocalPlayer.Character
+    end
+
+    local function isValidToolPart(obj)
+        if not obj:IsA("BasePart") then
+            return false
+        end
+        if ONLY_HANDLE then
+            return obj.Name == "Handle"
+        end
+        return true
+    end
+
+    local function getParts(tool)
+        local parts = {}
+        for _, obj in ipairs(tool:GetDescendants()) do
+            if isValidToolPart(obj) then
+                table.insert(parts, obj)
+            end
+        end
+        return parts
+    end
+
+    local function rememberOriginal(part)
+        if partCache[part] then
+            return
+        end
+        partCache[part] = {
+            Material = part.Material,
+            Color = part.Color,
+            LocalTransparencyModifier = part.LocalTransparencyModifier,
+        }
+    end
+
+    local function restorePart(part)
+        local old = partCache[part]
+        if not old or not part or not part.Parent then
+            return
+        end
+        part.Material = old.Material
+        part.Color = old.Color
+        part.LocalTransparencyModifier = old.LocalTransparencyModifier
+        partCache[part] = nil
+    end
+
+    local function removeHighlight(tool)
+        local h = highlightCache[tool]
+        if h then
+            h:Destroy()
+            highlightCache[tool] = nil
+        end
+    end
+    
+    local function restoreTool(tool)
+        for _, part in ipairs(getParts(tool)) do
+            restorePart(part)
+        end
+        removeHighlight(tool)
+    end
+
+    local function createHighlight(tool)
+        if not USE_HIGHLIGHT then
+            return
+        end
+        local existing = highlightCache[tool]
+        if existing and existing.Parent then
+            return
+        end
+        local h = Instance.new("Highlight")
+        h.Name = "_ToolCharmHighlight"
+        h.DepthMode = Enum.HighlightDepthMode.Occluded
+        h.FillColor = ESP_CFG.ToolCharms.Color1
+        h.FillTransparency = 0.78
+        h.OutlineColor = ESP_CFG.ToolCharms.Color2
+        h.OutlineTransparency = 0.2
+        h.Parent = tool
+        highlightCache[tool] = h
+    end
+
+    local function applyVisual(part, t)
+        if not part or not part.Parent then
+            return
+        end
+        rememberOriginal(part)
+        local wave = (math.sin(t * ANIM_SPEED) + 1) * 0.5
+        local wave2 = (math.sin((t * ANIM_SPEED * 1.7) + 1.3) + 1) * 0.5
+        local transparency = TRANSPARENCY_MIN + (TRANSPARENCY_MAX - TRANSPARENCY_MIN) * wave
+        local color = ESP_CFG.ToolCharms.Color1:Lerp(ESP_CFG.ToolCharms.Color2, wave2)
+        part.Material = Enum.Material.ForceField
+        part.Color = color
+        part.LocalTransparencyModifier = transparency
+    end
+
+    local function setupTool(tool)
+        if not tool:IsA("Tool") or trackedTools[tool] then
+            return
+        end
+        trackedTools[tool] = true
+        tool.AncestryChanged:Connect(function(_, parent)
+            if not parent then
+                restoreTool(tool)
+                trackedTools[tool] = nil
+            end
+        end)
+        tool.DescendantAdded:Connect(function(obj)
+            if isValidToolPart(obj) then
+                rememberOriginal(obj)
+            end
+        end)
+        tool.Unequipped:Connect(function()
+            if ONLY_WHEN_EQUIPPED then
+                restoreTool(tool)
+            end
+        end)
+    end
+
+    local function hookCharacter(character)
+        for _, obj in ipairs(character:GetChildren()) do
+            if obj:IsA("Tool") then
+                setupTool(obj)
+            end
+        end
+        character.ChildAdded:Connect(function(obj)
+            if obj:IsA("Tool") then
+                setupTool(obj)
+            end
+        end)
+    end
+
+    local function hookBackpack()
+        local backpack = LocalPlayer:WaitForChild("Backpack")
+        for _, obj in ipairs(backpack:GetChildren()) do
+            if obj:IsA("Tool") then
+                setupTool(obj)
+            end
+        end
+        backpack.ChildAdded:Connect(function(obj)
+            if obj:IsA("Tool") then
+                setupTool(obj)
+            end
+        end)
+    end
+
+    --====================================================
+    -- START
+    --====================================================
+    if LocalPlayer.Character then
+        hookCharacter(LocalPlayer.Character)
+    end
+    LocalPlayer.CharacterAdded:Connect(hookCharacter)
+    hookBackpack()
+
+    RunService.RenderStepped:Connect(function()
+        if not ESP_CFG.ToolCharms.Enabled then
+            if isEnabledCache then -- only restore if it was just disabled
+                for tool in pairs(trackedTools) do
+                    if tool and tool.Parent then
+                        restoreTool(tool)
+                    end
+                end
+                isEnabledCache = false
+            end
+            return
+        end
+        isEnabledCache = true
+
+        local character = LocalPlayer.Character
+        if not character then
+            return
+        end
+        local now = tick()
+        for tool in pairs(trackedTools) do
+            if tool and tool.Parent then
+                local shouldShow = true
+                if ONLY_WHEN_EQUIPPED then
+                    shouldShow = isToolEquipped(tool)
+                end
+                if shouldShow then
+                    createHighlight(tool)
+                    for _, part in ipairs(getParts(tool)) do
+                        applyVisual(part, now)
+                    end
+                    local h = highlightCache[tool]
+                    if h then
+                        local glow = (math.sin(now * ANIM_SPEED * 1.5) + 1) * 0.5
+                        h.FillColor = ESP_CFG.ToolCharms.Color1:Lerp(ESP_CFG.ToolCharms.Color2, glow)
+                        h.OutlineColor = ESP_CFG.ToolCharms.Color2:Lerp(ESP_CFG.ToolCharms.Color1, glow)
+                        h.FillTransparency = 0.78 + (glow * 0.08)
+                        h.OutlineTransparency = 0.14 + (glow * 0.12)
+                    end
+                else
+                    restoreTool(tool)
+                end
+            end
+        end
+    end)
+end
+
+
+-- [ SILENT AIM TRACKING & VISUALS ]
+local SilentTarget = nil
+local Mouse = LPLR:GetMouse()
+local Camera = workspace.CurrentCamera
+
+local SILENT_SNAP_OUT = Drawing.new("Line")
+SILENT_SNAP_OUT.Visible = false
+SILENT_SNAP_OUT.Color = Color3.new(0, 0, 0)
+SILENT_SNAP_OUT.Thickness = 3
+SILENT_SNAP_OUT.Transparency = 1
+pcall(function() SILENT_SNAP_OUT.ZIndex = 1 end)
+
+local SILENT_SNAP = Drawing.new("Line")
+SILENT_SNAP.Visible = false
+SILENT_SNAP.Color = Color3.new(1, 1, 1)
+SILENT_SNAP.Thickness = 1
+SILENT_SNAP.Transparency = 1
+pcall(function() SILENT_SNAP.ZIndex = 2 end)
+
+local function GetClosestPlayerToMouseSilent()
+    if not ESP_CFG.SilentAim.Enabled then return nil end
+    if ESP_CFG.SilentAim.Keybind and not UIS:IsKeyDown(ESP_CFG.SilentAim.Keybind) then return nil end
+    
+    local closest_player = nil
+    local shortest_distance = 9e9
+    local mouse_pos = UIS:GetMouseLocation()
+
+    for _, p in ipairs(PLRS:GetPlayers()) do
+        if p == LPLR then continue end
+        local char = p.Character
+        if not char then continue end
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        local hum = char:FindFirstChild("Humanoid")
+        local head = char:FindFirstChild("Head")
+
+        if hrp and hum and head and hum.Health > 0 then
+            -- Distance Check vs LPLR
+            local l_hrp = LPLR.Character and LPLR.Character:FindFirstChild("HumanoidRootPart")
+            if l_hrp then
+                local dist_3d = (hrp.Position - l_hrp.Position).Magnitude
+                if dist_3d > ESP_CFG.MaxDist then continue end
+            end
+
+            local screen_pos, on_screen = Camera:WorldToViewportPoint(head.Position)
+            if on_screen then
+                local magnitude = (Vector2.new(screen_pos.X, screen_pos.Y) - mouse_pos).Magnitude
+                if magnitude < shortest_distance then
+                    closest_player = p
+                    shortest_distance = magnitude
+                end
+            end
+        end
+    end
+    
+    return closest_player
+end
+
+local function UPD_SILENT_AIM()
+    SilentTarget = GetClosestPlayerToMouseSilent()
+
+    if SilentTarget and SilentTarget.Character and SilentTarget.Character:FindFirstChild("Head") and ESP_CFG.SilentAim.Enabled and ESP_CFG.Snapline.Enabled then
+        local head = SilentTarget.Character:FindFirstChild("Head")
+        local screen_pos, on_screen = Camera:WorldToViewportPoint(head.Position)
+        
+        if on_screen and (not ESP_CFG.SilentAim.Keybind or UIS:IsKeyDown(ESP_CFG.SilentAim.Keybind)) then
+            local mouse_pos = UIS:GetMouseLocation()
+            
+            SILENT_SNAP.Visible = true
+            SILENT_SNAP.From = mouse_pos
+            SILENT_SNAP.To = Vector2.new(screen_pos.X, screen_pos.Y)
+            SILENT_SNAP.Color = ESP_CFG.Snapline.Color
+            SILENT_SNAP.Thickness = ESP_CFG.Snapline.Thickness
+            
+            SILENT_SNAP_OUT.Visible = true
+            SILENT_SNAP_OUT.From = mouse_pos
+            SILENT_SNAP_OUT.To = Vector2.new(screen_pos.X, screen_pos.Y)
+            SILENT_SNAP_OUT.Thickness = ESP_CFG.Snapline.Thickness + 2
+        else
+            SILENT_SNAP.Visible = false
+            SILENT_SNAP_OUT.Visible = false
+        end
+    else
+        SILENT_SNAP.Visible = false
+        SILENT_SNAP_OUT.Visible = false
+    end
+end
+
+RS.RenderStepped:Connect(UPD_SILENT_AIM)
+
+-- [ SILENT AIM MODULE HOOKING ]
+local ok, PH = pcall(require, game:GetService("ReplicatedStorage").Modules.ProjectileHandler)
+if ok and PH then
+    local originalSimulate = PH.SimulateProjectile
+
+    PH.SimulateProjectile = function(self, gun, handle, settings, directions, firePoint, muzzle, vfx, visualize)
+        -- Si está habilitado, tenemos un Target, la tecla está pulsada (si la hay) y es tabla directions
+        if ESP_CFG.SilentAim.Enabled and SilentTarget and typeof(directions) == "table" and (not ESP_CFG.SilentAim.Keybind or UIS:IsKeyDown(ESP_CFG.SilentAim.Keybind)) then
+            local targetChar = SilentTarget.Character
+            local part = targetChar and (
+                targetChar:FindFirstChild("Head") or
+                targetChar:FindFirstChild("HumanoidRootPart")
+            )
+            
+            if part then
+                local origin
+                if firePoint then
+                    pcall(function()
+                        if firePoint:IsA("Attachment") then
+                            origin = firePoint.WorldPosition
+                        elseif firePoint:IsA("BasePart") then
+                            origin = firePoint.Position
+                        end
+                    end)
+                end
+                origin = origin or Camera.CFrame.Position
+
+                local newDir = (part.Position - origin).Unit
+                for i = 1, #directions do
+                    directions[i] = newDir
+                end
+            end
+        end
+
+        return originalSimulate(self, gun, handle, settings, directions, firePoint, muzzle, vfx, visualize)
+    end
+else
+    warn("[SilentAim] No se pudo requerir ProjectileHandler. El juego podría no estar usándolo.")
+end
+
 -- [ WORLD VISUALS ]
 -- Logic handled via UI Toggles directly
 
 local function ADD_CRD(PAG, TIT, DES, CB)
     local CRD = Instance.new("Frame", PAG)
-    CRD.BackgroundColor3 = Color3.new(0, 0, 0)
+    CRD.BackgroundColor3 = CFG.COL.BG
     CRD.BackgroundTransparency = 0.6
     RND(CRD, 10)
     STR(CRD, CFG.COL.ACC, 1).Transparency = 0.8
@@ -1063,14 +1900,28 @@ local function ADD_CRD(PAG, TIT, DES, CB)
     D.TextYAlignment = Enum.TextYAlignment.Top
 
     local B = Instance.new("TextButton", CRD)
-    B.Text = "ACTIVATE"
+    B.Text = TIT:find("BUY") and "PURCHASE" or "ACTIVATE"
     B.Size = UDim2.new(1, -20, 0, 25)
     B.Position = UDim2.new(0, 10, 1, -30)
-    B.BackgroundColor3 = CFG.COL.ACC
-    B.TextColor3 = Color3.new(0, 0, 0)
+    B.BackgroundColor3 = CFG.COL.BG
+    B.BackgroundTransparency = 0.8
+    B.TextColor3 = CFG.COL.ACC
     B.Font = Enum.Font.GothamBold
     B.TextSize = 11
-    RND(B, 6)
+    B.AutoButtonColor = false
+    RND(B, 8)
+    
+    local B_STR = STR(B, CFG.COL.ACC, 1.2)
+    B_STR.Transparency = 0.7
+
+    B.MouseEnter:Connect(function()
+        TWN(B, {BackgroundTransparency = 0.6, BackgroundColor3 = CFG.COL.ACC, TextColor3 = Color3.new(0, 0, 0)}, 0.2)
+        TWN(B_STR, {Transparency = 0.4}, 0.2)
+    end)
+    B.MouseLeave:Connect(function()
+        TWN(B, {BackgroundTransparency = 0.8, BackgroundColor3 = CFG.COL.BG, TextColor3 = CFG.COL.ACC}, 0.2)
+        TWN(B_STR, {Transparency = 0.7}, 0.2)
+    end)
 
     B.MouseButton1Click:Connect(function()
         TWN(B, {TextSize = 10}, 0.1)
@@ -1107,12 +1958,31 @@ local function ADD_ESP_ROW(PAG, TXT, DEF_TGL, CB_TGL, CLRS)
     RL.VerticalAlignment = Enum.VerticalAlignment.Center
     RL.Padding = UDim.new(0, 8)
 
+    if CLRS then
+        for i, color_data in ipairs(CLRS) do
+            local current_c = color_data
+            local CBUT = Instance.new("TextButton", RIGHT)
+            CBUT.Size = UDim2.new(0, 18, 0, 18)
+            CBUT.BackgroundColor3 = current_c.VAL
+            CBUT.Text = ""
+            RND(CBUT, 5)
+            STR(CBUT, CFG.COL.ACC, 1.2).Transparency = 0.7
+            CBUT.MouseButton1Click:Connect(function()
+                local mp = UIS:GetMouseLocation()
+                PICKER_DATA:OPEN_PICKER(current_c.VAL, 0, mp, function(nc, na)
+                    current_c.VAL = nc
+                    CBUT.BackgroundColor3 = nc
+                    if current_c.CB then current_c.CB(nc, na) end
+                end)
+            end)
+        end
+    end
+
     if CB_TGL then
         local BTN = Instance.new("TextButton", RIGHT)
         BTN.Size = UDim2.new(0, 32, 0, 16)
         BTN.BackgroundColor3 = DEF_TGL and CFG.COL.ACC or CFG.COL.GRY
         BTN.Text = ""
-        BTN.LayoutOrder = 10
         RND(BTN, 8)
         local IND = Instance.new("Frame", BTN)
         IND.Size = UDim2.new(0, 12, 0, 12)
@@ -1126,27 +1996,6 @@ local function ADD_ESP_ROW(PAG, TXT, DEF_TGL, CB_TGL, CLRS)
             TWN(IND, {Position = val and UDim2.new(1, -14, 0.5, -6) or UDim2.new(0, 2, 0.5, -6)}, 0.2)
             if CB_TGL then CB_TGL(val) end
         end)
-    end
-
-    if CLRS then
-        for i, color_data in ipairs(CLRS) do
-            local current_c = color_data
-            local CBUT = Instance.new("TextButton", RIGHT)
-            CBUT.Size = UDim2.new(0, 16, 0, 16)
-            CBUT.BackgroundColor3 = current_c.VAL
-            CBUT.Text = ""
-            CBUT.LayoutOrder = i
-            RND(CBUT, 4)
-            STR(CBUT, Color3.new(0,0,0), 1).Transparency = 0.5
-            CBUT.MouseButton1Click:Connect(function()
-                local mp = UIS:GetMouseLocation()
-                PICKER_DATA:OPEN_PICKER(current_c.VAL, 0, mp, function(nc, na)
-                    current_c.VAL = nc
-                    CBUT.BackgroundColor3 = nc
-                    if current_c.CB then current_c.CB(nc, na) end
-                end)
-            end)
-        end
     end
 end
 
@@ -1170,21 +2019,27 @@ end
 
 -- [ GUI ROOT ]
 local SCR = Instance.new("ScreenGui")
+_G.CENTRAL_GUI = SCR
 SCR.Name = "CEN_V2"
 SCR.ResetOnSpawn = false
-SCR.DisplayOrder = -1000  -- Deep negative to stay behind EVERYTHING in PlayerGui
+SCR.DisplayOrder = 1000  -- Functional level, crosshair will be higher
+SCR.IgnoreGuiInset = true
 SCR.Parent = LPLR:WaitForChild("PlayerGui")
 
 -- Aggressively raise ANY other GUI found in PlayerGui
 local PG = LPLR:WaitForChild("PlayerGui")
 local function RAISE_HUD(gui)
-    if not gui:IsA("ScreenGui") then return end
+    if not gui:IsA("ScreenGui") or gui == _G.CENTRAL_GUI or gui == _G.CENTRAL_NOTIFS_REF then return end
     local n = gui.Name:lower()
-    if n == "cen_v2" or n == "esp_holder" or n == "central_picker" or n == "central_notifs" then return end
     
-    -- Any positive value is fine, but let's be sure.
-    if gui.DisplayOrder < 10 then
-        gui.DisplayOrder = 10
+    -- Filter out our own GUIs
+    if n == "cen_v2" or n:find("esp_holder") or n:find("picker") or n:find("notif") or n:find("espholder") then return end
+    
+    -- Force specific target GUIs to the top
+    if n == "gungui" or n:find("crosshair") or n:find("reticle") then
+        gui.DisplayOrder = 2147483647
+    elseif gui.DisplayOrder < 100 then
+        gui.DisplayOrder = 100 -- Standard HUDs stay below our UI (1000)
     end
 end
 
@@ -1202,8 +2057,8 @@ end)
 -- [ MAIN WINDOW ]
 local MAIN = Instance.new("Frame", SCR)
 MAIN.Name = "WIN"
-MAIN.Size = UDim2.new(0, 550, 0, 350)
-MAIN.Position = UDim2.new(0.5, -275, 0.5, -175)
+MAIN.Size = UDim2.new(0, 700, 0, 565)
+MAIN.Position = UDim2.new(0.5, -350, 0.5, -282)
 MAIN.BackgroundColor3 = CFG.COL.BG
 MAIN.BackgroundTransparency = 0.1
 MAIN.BorderSizePixel = 0
@@ -1297,33 +2152,54 @@ local WM      = { INF_AMMO = false, NO_RECOIL = false, RAPID_FIRE = false }
 local WM_RATE = 0.01
 
 -- Movement state — declared here so close handler can access it
-local FLY_ON  = false
-local SPD_ON  = false
-local JMP_ON  = false
+_G.EXE.FLY_ON = false
+_G.EXE.SPD_ON = false
+_G.EXE.JMP_ON = false
 
--- Close
-B_CLS.MouseButton1Click:Connect(function()
-    -- Stop all farm threads
-    if FARM_RUNNING ~= nil then FARM_RUNNING = false end
-    if FARM_THREAD  ~= nil then pcall(task.cancel, FARM_THREAD)  FARM_THREAD  = nil end
-    if CF_RUNNING   ~= nil then CF_RUNNING   = false end
-    if CF_THREAD    ~= nil then pcall(task.cancel, CF_THREAD)    CF_THREAD    = nil end
-    if BF_RUNNING   ~= nil then BF_RUNNING   = false end
-    if BF_THREAD    ~= nil then pcall(task.cancel, BF_THREAD)    BF_THREAD    = nil end
-    if WH_RUNNING   ~= nil then WH_RUNNING   = false end
-    if WH_THREAD    ~= nil then pcall(task.cancel, WH_THREAD)    WH_THREAD    = nil end
-    if CC_RUNNING   ~= nil then CC_RUNNING   = false end
-    if CC_THREAD    ~= nil then pcall(task.cancel, CC_THREAD)    CC_THREAD    = nil end
+-- [ PANIC BUTTON / TOTAL BLACKOUT ]
+local function PANIC()
+    -- 1. Stop all Auto Farm threads immediately
+    for k, v in pairs(_G.EXE) do
+        if k:find("_RUNNING") or k:find("_ON") then
+            _G.EXE[k] = false
+        elseif k:find("_THREAD") and v then
+            pcall(task.cancel, v)
+            _G.EXE[k] = nil
+        end
+    end
+    
+    -- Legacy locals support (if any still exist)
+    if _G.EXE.FARM_RUNNING ~= nil then _G.EXE.FARM_RUNNING = false end
+    if _G.EXE.FARM_THREAD  ~= nil then pcall(task.cancel, _G.EXE.FARM_THREAD)  _G.EXE.FARM_THREAD  = nil end
 
-    -- Clean up character only if something was actually on
+    -- Stop Burger Farm
+    if _G.BF_STOP then pcall(_G.BF_STOP) end
+
+    -- 2. Disable Visuals / ESP
+    if ESP_CFG then
+        ESP_CFG.Enabled = false
+        if ESP_CFG.SilentAim then ESP_CFG.SilentAim.Enabled = false end
+    end
+
+    -- 3. Reset Lighting (Fullbright)
+    pcall(function()
+        local lighting = game:GetService("Lighting")
+        lighting.Brightness = 1
+        lighting.OutdoorAmbient = Color3.fromRGB(127, 127, 127)
+    end)
+
+    -- 4. Clean Character Movement / Speed
     pcall(function()
         local char = LPLR.Character
         if not char then return end
-        local hrp = char:FindFirstChild("HumanoidRootPart")
         local hum = char:FindFirstChildOfClass("Humanoid")
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+
+        -- Reset Speed
+        if hum then hum.WalkSpeed = 16 end
         
-        -- Fly normal
-        if FLY_ON and hrp then
+        -- Stop Fly
+        if hrp then
             local bv = hrp:FindFirstChildOfClass("BodyVelocity")
             local bg = hrp:FindFirstChildOfClass("BodyGyro")
             if bv then bv:Destroy() end
@@ -1342,33 +2218,32 @@ B_CLS.MouseButton1Click:Connect(function()
                     local bg = root:FindFirstChildOfClass("BodyGyro")
                     if bv then bv:Destroy() end
                     if bg then bg:Destroy() end
-                    -- (no re-anclamos porque los coches no deben estar anclados para manejar)
                 end
             end
         end
-
-        if SPD_ON and hum then hum.WalkSpeed = 16 end
     end)
 
-    -- Turn off weapon mods only if any were on
-    if WM.INF_AMMO   then WM.INF_AMMO   = false end
-    if WM.NO_RECOIL  then WM.NO_RECOIL  = false end
-    if WM.RAPID_FIRE then WM.RAPID_FIRE = false end
+    -- 5. Turn off Weapon Mods
+    if WM then
+        WM.INF_AMMO   = false
+        WM.NO_RECOIL  = false
+        WM.RAPID_FIRE = false
+    end
 
-    -- Apagar variables globales de movimiento para seguridad
-    FLY_ON = false
-    SPD_ON = false
-    CF_ON  = false
-
-    -- Desconectar keybinds
+    -- 6. Disconnect Keybinds
     if _G.CEN_BINDS then
         for _, c in ipairs(_G.CEN_BINDS) do
-            if c then c:Disconnect() end
+            if c then pcall(function() c:Disconnect() end) end
         end
         _G.CEN_BINDS = nil
     end
 
     _G.CENTRAL_LOADED = false
+end
+
+-- Close
+B_CLS.MouseButton1Click:Connect(function()
+    PANIC()
     SCR:Destroy()
 end)
 
@@ -1411,8 +2286,8 @@ TCON.Name = "TABS"
 TCON.Size = UDim2.new(1, -140, 0, 35)
 TCON.Position = UDim2.new(0.5, 0, 0, 10)
 TCON.AnchorPoint = Vector2.new(0.5, 0)
-TCON.BackgroundColor3 = Color3.new(0, 0, 0)
-TCON.BackgroundTransparency = 0.5
+TCON.BackgroundColor3 = CFG.COL.BG
+TCON.BackgroundTransparency = 0.4
 TCON.ZIndex = 10
 RND(TCON, 20)
 STR(TCON, CFG.COL.ACC, 1).Transparency = 0.8
@@ -1552,38 +2427,38 @@ end
 -- ============================================================
 local LEFT_COL   -- forward declare so STORE_CARD can use it
 local RIGHT_COL  -- forward declare so ACTIONS_CARD can use it
-do
+;(function()  -- register isolation: MISC right col
     local TP_LOCS = {
-        { name = "BLACK MARKET",   pos = Vector3.new(72.36,    38.57,  1092.94) },
-        { name = "BISCUITZ",       pos = Vector3.new(-311.33,  18.23,   179.82) },
-        { name = "CARDS",          pos = Vector3.new(-330.12,  29.89,    31.50) },
-        { name = "TRAP 1",         pos = Vector3.new(-79.15,   -6.40,  -278.94) },
-        { name = "TRAP 2",         pos = Vector3.new(-310.97,  17.51,   333.10) },
-        { name = "TRAP 3",         pos = Vector3.new(-123.23,   3.65,   807.66) },
-        { name = "TRAP 4",         pos = Vector3.new(-1329.99,  3.80,  1382.98) },
-        { name = "MASK",           pos = Vector3.new(5.83,      4.20,   990.94) },
-        { name = "APT 1",          pos = Vector3.new(-64.50,   4.21,   275.71) },
-        { name = "APT 2",          pos = Vector3.new(-647.27,   5.43,  1243.49) },
-        { name = "APT 3",          pos = Vector3.new(153.25,    7.60,  1275.29) },
-        { name = "APT 4",          pos = Vector3.new(-954.08,   4.16,   939.26) },
-        { name = "APT 5",          pos = Vector3.new(358.61,    9.11,     7.91) },
-        { name = "TRAP",           pos = Vector3.new(214.26,    4.10,  -121.55) },
-        { name = "CINEMA",         pos = Vector3.new(35.89,     4.30,  -129.71) },
-        { name = "SAKS",           pos = Vector3.new(59.02,     4.35,  -196.83) },
-        { name = "GUN SHOP 1",     pos = Vector3.new(3.74,      5.10,   -78.26) },
-        { name = "GUN SHOP 2",     pos = Vector3.new(-794.38,   5.08,  1501.85) },
-        { name = "DELI 1",         pos = Vector3.new(-411.77,   4.85,   444.61) },
-        { name = "DELI 2",         pos = Vector3.new(-49.31,    4.23,   -81.65) },
-        { name = "DELI 3",         pos = Vector3.new(-147.28,   4.35,  1196.95) },
-        { name = "DELI 4",         pos = Vector3.new(-931.42,   4.14,   639.29) },
-        { name = "HOSPITAL",       pos = Vector3.new(-147.28,   4.35,  1196.95) },
-        { name = "TATTOOS",        pos = Vector3.new(-72.88,    4.20,  -149.49) },
-        { name = "LAUNDROMAT",     pos = Vector3.new(-66.29,    4.30,  -192.87) },
-        { name = "CAR DEALER",     pos = Vector3.new(-258.01,   4.60,   677.74) },
-        { name = "CHOP SHOP",      pos = Vector3.new(-427.63,   3.65,   624.76) },
-        { name = "GUN MODS",       pos = Vector3.new(-670.75,   4.36,   456.31) },
-        { name = "MELEE",          pos = Vector3.new(-122.12,  -16.44,  508.69) },
-        { name = "WAREHOUSE",      pos = Vector3.new(-1179.00,  3.80,  1341.17) },
+        { name = "🏴BLACK MARKET",   pos = Vector3.new(72.36,    38.57,  1092.94) },
+        { name = "🍪BISCUITZ",       pos = Vector3.new(-311.33,  18.23,   179.82) },
+        { name = "💳CARDS",          pos = Vector3.new(-330.12,  29.89,    31.50) },
+        { name = "🏚️TRAP 1",         pos = Vector3.new(-79.15,   -6.40,  -278.94) },
+        { name = "🏚️TRAP 2",         pos = Vector3.new(-310.97,  17.51,   333.10) },
+        { name = "🏚️TRAP 3",         pos = Vector3.new(-123.23,   3.65,   807.66) },
+        { name = "🏚️TRAP 4",         pos = Vector3.new(-1329.99,  3.80,  1382.98) },
+        { name = "🎭MASK",           pos = Vector3.new(5.83,      4.20,   990.94) },
+        { name = "🏠APT 1",          pos = Vector3.new(-64.50,   4.21,   275.71) },
+        { name = "🏠APT 2",          pos = Vector3.new(-647.27,   5.43,  1243.49) },
+        { name = "🏠APT 3",          pos = Vector3.new(153.25,    7.60,  1275.29) },
+        { name = "🏠APT 4",          pos = Vector3.new(-954.08,   4.16,   939.26) },
+        { name = "🏠APT 5",          pos = Vector3.new(358.61,    9.11,     7.91) },
+        { name = "🏚️TRAP",           pos = Vector3.new(214.26,    4.10,  -121.55) },
+        { name = "🎬CINEMA",         pos = Vector3.new(35.89,     4.30,  -129.71) },
+        { name = "🎒SAKS",           pos = Vector3.new(59.02,     4.35,  -196.83) },
+        { name = "🔫GUN SHOP 1",     pos = Vector3.new(3.74,      5.10,   -78.26) },
+        { name = "🔫GUN SHOP 2",     pos = Vector3.new(-794.38,   5.08,  1501.85) },
+        { name = "🥖DELI 1",         pos = Vector3.new(-411.77,   4.85,   444.61) },
+        { name = "🥖DELI 2",         pos = Vector3.new(-49.31,    4.23,   -81.65) },
+        { name = "🥖DELI 3",         pos = Vector3.new(-147.28,   4.35,  1196.95) },
+        { name = "🥖DELI 4",         pos = Vector3.new(-931.42,   4.14,   639.29) },
+        { name = "🏥HOSPITAL",       pos = Vector3.new(-138.34, 13.77, 933.28) },
+        { name = "🖋️TATTOOS",        pos = Vector3.new(-72.88,    4.20,  -149.49) },
+        { name = "🧼LAUNDROMAT",     pos = Vector3.new(-66.29,    4.30,  -192.87) },
+        { name = "🏎️CAR DEALER",     pos = Vector3.new(-258.01,   4.60,   677.74) },
+        { name = "🔧CHOP SHOP",      pos = Vector3.new(-427.63,   3.65,   624.76) },
+        { name = "🔫GUN MODS",       pos = Vector3.new(-670.75,   4.36,   456.31) },
+        { name = "🔪MELEE",          pos = Vector3.new(-122.12,  -16.44,  508.69) },
+        { name = "📦WAREHOUSE",      pos = Vector3.new(-1179.00,  3.80,  1341.17) },
     }
 
     -- Outer row so card only takes left half
@@ -1629,25 +2504,26 @@ do
 
     -- Header
     local TP_HDR = Instance.new("Frame", TP_CARD)
-    TP_HDR.Size = UDim2.new(1, 0, 0, 28)
+    TP_HDR.Size = UDim2.new(1, 0, 0, 35)
     TP_HDR.BackgroundTransparency = 1
     TP_HDR.BorderSizePixel = 0
     TP_HDR.LayoutOrder = 0
 
     local TP_ICO = Instance.new("ImageLabel", TP_HDR)
-    TP_ICO.Size = UDim2.new(0, 28, 0, 28)
+    TP_ICO.Size = UDim2.new(0, 32, 0, 32)
+    TP_ICO.Position = UDim2.new(0, 0, 0.5, -16)
     TP_ICO.BackgroundTransparency = 1
-    TP_ICO.Image = "rbxassetid://129397461958291"
+    TP_ICO.Image = "rbxassetid://102084991489439"
     TP_ICO.ImageColor3 = CFG.COL.ACC
 
     local TP_TITLE = Instance.new("TextLabel", TP_HDR)
-    TP_TITLE.Size = UDim2.new(1, -36, 1, 0)
-    TP_TITLE.Position = UDim2.new(0, 36, 0, 0)
+    TP_TITLE.Size = UDim2.new(1, -40, 1, 0)
+    TP_TITLE.Position = UDim2.new(0, 40, 0, 0)
     TP_TITLE.BackgroundTransparency = 1
     TP_TITLE.Text = "Teleports"
     TP_TITLE.TextColor3 = CFG.COL.TXT
     TP_TITLE.Font = Enum.Font.GothamBold
-    TP_TITLE.TextSize = 18
+    TP_TITLE.TextSize = 20
     TP_TITLE.TextXAlignment = Enum.TextXAlignment.Left
 
     -- Divider
@@ -1687,7 +2563,7 @@ do
     TP_BTN.Text = "  Select Location..."
     TP_BTN.TextColor3 = CFG.COL.GRY
     TP_BTN.Font = Enum.Font.GothamBold
-    TP_BTN.TextSize = 12
+    TP_BTN.TextSize = 14
     TP_BTN.TextXAlignment = Enum.TextXAlignment.Left
     TP_BTN.ZIndex = 11
 
@@ -1794,25 +2670,26 @@ do
     GUN_PAD.PaddingRight  = UDim.new(0, 12)
 
     local GUN_HDR = Instance.new("Frame", GUN_CARD)
-    GUN_HDR.Size = UDim2.new(1, 0, 0, 28)
+    GUN_HDR.Size = UDim2.new(1, 0, 0, 35)
     GUN_HDR.BackgroundTransparency = 1
     GUN_HDR.BorderSizePixel = 0
     GUN_HDR.LayoutOrder = 0
 
     local GUN_ICO = Instance.new("ImageLabel", GUN_HDR)
-    GUN_ICO.Size = UDim2.new(0, 28, 0, 28)
+    GUN_ICO.Size = UDim2.new(0, 32, 0, 32)
+    GUN_ICO.Position = UDim2.new(0, 0, 0.5, -16)
     GUN_ICO.BackgroundTransparency = 1
     GUN_ICO.Image = "rbxassetid://133604745657365"
     GUN_ICO.ImageColor3 = CFG.COL.ACC
 
     local GUN_TITLE = Instance.new("TextLabel", GUN_HDR)
-    GUN_TITLE.Size = UDim2.new(1, -36, 1, 0)
-    GUN_TITLE.Position = UDim2.new(0, 36, 0, 0)
+    GUN_TITLE.Size = UDim2.new(1, -40, 1, 0)
+    GUN_TITLE.Position = UDim2.new(0, 40, 0, 0)
     GUN_TITLE.BackgroundTransparency = 1
     GUN_TITLE.Text = "Guns"
     GUN_TITLE.TextColor3 = CFG.COL.TXT
     GUN_TITLE.Font = Enum.Font.GothamBold
-    GUN_TITLE.TextSize = 18
+    GUN_TITLE.TextSize = 20
     GUN_TITLE.TextXAlignment = Enum.TextXAlignment.Left
 
     local GUN_DIV = Instance.new("Frame", GUN_CARD)
@@ -1863,8 +2740,8 @@ do
 
         local FRM = Instance.new("Frame", WRAP)
         FRM.Size = UDim2.new(1, 0, 0, 35)
-        FRM.BackgroundColor3 = Color3.new(0,0,0)
-        FRM.BackgroundTransparency = 0.5
+        FRM.BackgroundColor3 = CFG.COL.BG
+        FRM.BackgroundTransparency = 0.4
         FRM.BorderSizePixel = 0
         FRM.ClipsDescendants = true
         FRM.ZIndex = 20 - order
@@ -1877,7 +2754,7 @@ do
         BTN.Text = "  " .. label
         BTN.TextColor3 = CFG.COL.TXT
         BTN.Font = Enum.Font.GothamBold
-        BTN.TextSize = 13
+        BTN.TextSize = 14
         BTN.TextXAlignment = Enum.TextXAlignment.Left
         BTN.ZIndex = 21 - order
 
@@ -2246,8 +3123,8 @@ do
 
     local WM_FRM = Instance.new("Frame", WM_WRAP)
     WM_FRM.Size = UDim2.new(1, 0, 0, 35)
-    WM_FRM.BackgroundColor3 = Color3.new(0, 0, 0)
-    WM_FRM.BackgroundTransparency = 0.5
+    WM_FRM.BackgroundColor3 = CFG.COL.BG
+    WM_FRM.BackgroundTransparency = 0.4
     WM_FRM.BorderSizePixel = 0
     WM_FRM.ClipsDescendants = true
     WM_FRM.ZIndex = 14
@@ -2450,10 +3327,10 @@ do
             TWN(WM_ICO,  {Rotation = 0})
         end
     end)
-end
+end)()
 
 -- ── ACTIONS CARD (right col, below Guns) ──────────────────────
-do
+;(function()  -- register isolation: actions card
     local ACT_CARD = Instance.new("Frame", RIGHT_COL)
     ACT_CARD.Size = UDim2.new(1, 0, 0, 0)
     ACT_CARD.AutomaticSize = Enum.AutomaticSize.Y
@@ -2508,21 +3385,42 @@ do
     local function MK_ACT_BTN(txt, order, cb)
         local BTN = Instance.new("TextButton", ACT_CARD)
         BTN.Size = UDim2.new(1, 0, 0, 34)
-        BTN.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
-        BTN.BackgroundTransparency = 0.1
+        BTN.BackgroundColor3 = CFG.COL.BG
+        BTN.BackgroundTransparency = 0.82
         BTN.BorderSizePixel = 0
         BTN.Text = txt
         BTN.TextColor3 = CFG.COL.TXT
         BTN.Font = Enum.Font.GothamBold
         BTN.TextSize = 13
         BTN.LayoutOrder = order
-        RND(BTN, 8)
+        BTN.AutoButtonColor = false
+        RND(BTN, 10)
+        
+        local STR_OBJ = STR(BTN, CFG.COL.ACC, 1.2)
+        STR_OBJ.Transparency = 0.8
+        STR_OBJ.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+        local GRAD = Instance.new("UIGradient", BTN)
+        GRAD.Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, Color3.new(1,1,1)),
+            ColorSequenceKeypoint.new(1, Color3.new(0.8,0.8,0.8))
+        })
+        GRAD.Rotation = 45
+        GRAD.Transparency = NumberSequence.new(0.5)
+
+        BTN.MouseEnter:Connect(function()
+            TWN(BTN, {BackgroundTransparency = 0.7, BackgroundColor3 = CFG.COL.ACC}, 0.2)
+            TWN(STR_OBJ, {Transparency = 0.5}, 0.2)
+        end)
+        BTN.MouseLeave:Connect(function()
+            TWN(BTN, {BackgroundTransparency = 0.82, BackgroundColor3 = CFG.COL.BG}, 0.2)
+            TWN(STR_OBJ, {Transparency = 0.8}, 0.2)
+        end)
 
         BTN.MouseButton1Click:Connect(function()
-            TWN(BTN, {BackgroundColor3 = CFG.COL.ACC, TextColor3 = Color3.new(0,0,0)}, 0.1)
-            task.delay(0.2, function()
-                TWN(BTN, {BackgroundColor3 = Color3.fromRGB(30,30,40), TextColor3 = CFG.COL.TXT}, 0.2)
-            end)
+            TWN(BTN, {BackgroundTransparency = 0.4, TextSize = 12}, 0.1)
+            task.wait(0.1)
+            TWN(BTN, {BackgroundTransparency = 0.7, TextSize = 13}, 0.1)
             cb()
         end)
         return BTN
@@ -2734,7 +3632,7 @@ do
             SG:Destroy()
         end)
     end)
-end
+end)()
 
 -- ── STORE ITEMS CARD (left col, below TP_CARD) ────────────────
 do
@@ -2801,8 +3699,8 @@ do
 
         local FRM = Instance.new("Frame", WRAP)
         FRM.Size = UDim2.new(1, 0, 0, 35)
-        FRM.BackgroundColor3 = Color3.new(0,0,0)
-        FRM.BackgroundTransparency = 0.5
+        FRM.BackgroundColor3 = CFG.COL.BG
+        FRM.BackgroundTransparency = 0.4
         FRM.BorderSizePixel = 0
         FRM.ClipsDescendants = true
         FRM.ZIndex = 20 - order
@@ -2815,7 +3713,7 @@ do
         BTN.Text = "  " .. label
         BTN.TextColor3 = CFG.COL.TXT
         BTN.Font = Enum.Font.GothamBold
-        BTN.TextSize = 13
+        BTN.TextSize = 14
         BTN.TextXAlignment = Enum.TextXAlignment.Left
         BTN.ZIndex = 21 - order
 
@@ -3016,16 +3914,39 @@ do
 
     -- Buy button
     local SC_BUY = Instance.new("TextButton", STORE_CARD)
+    SC_BUY.Name = "CEN_ACCENT_TEXT"
     SC_BUY.Size = UDim2.new(1, 0, 0, 34)
-    SC_BUY.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
-    SC_BUY.BackgroundTransparency = 0.1
+    SC_BUY.BackgroundColor3 = CFG.COL.BG
+    SC_BUY.BackgroundTransparency = 0.82
     SC_BUY.BorderSizePixel = 0
-    SC_BUY.Text = "Buy"
+    SC_BUY.Text = "Purchase"
     SC_BUY.TextColor3 = CFG.COL.ACC
     SC_BUY.Font = Enum.Font.GothamBold
     SC_BUY.TextSize = 13
     SC_BUY.LayoutOrder = 4
-    RND(SC_BUY, 8)
+    SC_BUY.AutoButtonColor = false
+    RND(SC_BUY, 10)
+
+    local BUY_STR = STR(SC_BUY, CFG.COL.ACC, 1.2)
+    BUY_STR.Transparency = 0.8
+    BUY_STR.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+    local BUY_GRAD = Instance.new("UIGradient", SC_BUY)
+    BUY_GRAD.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.new(1,1,1)),
+        ColorSequenceKeypoint.new(1, Color3.new(0.8,0.8,0.8))
+    })
+    BUY_GRAD.Rotation = 45
+    BUY_GRAD.Transparency = NumberSequence.new(0.5)
+
+    SC_BUY.MouseEnter:Connect(function()
+        TWN(SC_BUY, {BackgroundTransparency = 0.65, BackgroundColor3 = CFG.COL.ACC, TextColor3 = Color3.new(0,0,0)}, 0.2)
+        TWN(BUY_STR, {Transparency = 0.5}, 0.2)
+    end)
+    SC_BUY.MouseLeave:Connect(function()
+        TWN(SC_BUY, {BackgroundTransparency = 0.82, BackgroundColor3 = CFG.COL.BG, TextColor3 = CFG.COL.ACC}, 0.2)
+        TWN(BUY_STR, {Transparency = 0.8}, 0.2)
+    end)
 
     SC_BUY.MouseButton1Click:Connect(function()
         if ST_SELECTED == "" then
@@ -3035,10 +3956,9 @@ do
         local item = ST_SELECTED
         local qty  = ST_AMOUNT
 
-        TWN(SC_BUY, {BackgroundColor3 = CFG.COL.ACC, TextColor3 = Color3.new(0,0,0)}, 0.1)
-        task.delay(0.25, function()
-            TWN(SC_BUY, {BackgroundColor3 = Color3.fromRGB(30,30,40), TextColor3 = CFG.COL.ACC}, 0.2)
-        end)
+        TWN(SC_BUY, {BackgroundTransparency = 0.4, TextSize = 12}, 0.1)
+        task.wait(0.1)
+        TWN(SC_BUY, {BackgroundTransparency = 0.65, TextSize = 13}, 0.1)
 
         task.spawn(function()
             -- Check weapon before anything else
@@ -3066,7 +3986,7 @@ do
                             if pp then table.insert(crates, {obj=v, pp=pp}) end
                         end
                     end
-                    if #crates == 0 then error("No se encontraron ammo crates!") end
+                    if #crates == 0 then error("No ammo crates found!") end
                     -- Elegir UN crate al azar y quedarse ahí toda la compra
                     local crate = crates[math.random(1, #crates)]
                     BYPASS_TP(crate.obj.Position + Vector3.new(0, 3, 0))
@@ -3197,13 +4117,21 @@ local PurchaseSeeds_R = RS_F.Remotes.PurchaseSeeds
 local FlowerDropOff_R = RS_F.Remotes.FlowerDropOff
 local InquireFarm_R = RS_F.Remotes.inquireFarming
 
+local function _G_EXE_GET(k) return _G.EXE[k] end
+local function _G_EXE_SET(k, v) _G.EXE[k] = v end
+
 -- Shared farm config (changed by dropdowns)
 local FARM_PLANTA          = "Daisy"   -- default
 local MODO_FARM            = "A"       -- default: A or B
 local FARM_CONFIG          = 1         -- default: 1=Normal 4pots | 2=Multi-Wave Beta
-local FARM_RUNNING         = false     -- toggle state
+
+-- Redirect variables to global EXE table for PANIC support
+_G.EXE.FARM_RUNNING         = false     -- stub local
 local FARM_STOP_AFTER      = false     -- finish current cycle then stop
-local FARM_THREAD          = nil       -- active coroutine (used for instant cancel)
+_G.EXE.FARM_THREAD          = nil       -- stub local
+
+-- We wrap them in metatable or just direct access? 
+-- Direct access in loops is better. I will replace definitions with direct _G.EXE references.
 
 -- ── PLANT DATA (ordered by required level) ─────────────────
 local PLANT_DATA = {
@@ -3282,10 +4210,9 @@ local function F_SPAWN(nombre)
     return LPLR.Character or LPLR.CharacterAdded:Wait()
 end
 
-local function F_TP(char, pos)
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if hrp then hrp.CFrame = CFrame.new(pos) end
-    task.wait(0.3)
+local function F_TP(_, pos)
+    TP_CLASSIC(pos)
+    task.wait(0.1)
 end
 
 local function F_EQUIP(char, name)
@@ -3413,40 +4340,74 @@ local function F_SELECT_POTS_EXCL(EXCL_MAP)
 end
 
 -- ── PLANT A WAVE (shared by modes A, B, C) ──────────────────
+-- Hold helper para Plant Shovel (igual que BF_HOLD)
+local function F_HOLD(prompt)
+    if not prompt or not prompt.Enabled then return end
+    local dur = prompt.HoldDuration
+    if dur and dur > 0 then
+        -- Enfocar camara al prompt
+        local cam  = workspace.CurrentCamera
+        local char = LPLR.Character
+        local hrp  = char and char:FindFirstChild("HumanoidRootPart")
+        local targetPos = prompt.Parent and prompt.Parent:IsA("BasePart")
+            and prompt.Parent.Position
+            or (prompt.Parent and prompt.Parent:IsA("Attachment")
+            and prompt.Parent.WorldPosition)
+            or nil
+        if hrp and targetPos then
+            cam.CameraType = Enum.CameraType.Scriptable
+            cam.CFrame = CFrame.new(hrp.Position + Vector3.new(0, 1.5, 0), targetPos)
+        end
+        -- Hacer hold
+        pcall(function()
+            prompt:InputHoldBegin()
+            task.wait(dur + 0.3)
+            prompt:InputHoldEnd()
+        end)
+        -- Restaurar camara
+        pcall(function()
+            if char then cam.CameraSubject = char:FindFirstChildOfClass("Humanoid") end
+            cam.CameraType = Enum.CameraType.Custom
+        end)
+    else
+        fireproximityprompt(prompt)
+    end
+end
+
 local function F_PLANT_WAVE_A(pots)
     local char
     -- Plantar
     for _, data in ipairs(pots) do
-        if not FARM_RUNNING then return false end
+        if not _G.EXE.FARM_RUNNING then return false end
         local prompt = F_GET_PROMPT(data)
         if not prompt then continue end
         if not F_GET_POT(data):GetAttribute("Seeds") and F_COUNT("Seeds") > 0 then
             char = F_GO_POT(data)
             F_EQUIP(char, "Seeds")
-            fireproximityprompt(prompt)
+            F_HOLD(prompt)
             F_WAIT_OFF(prompt, 10) F_WAIT_ON(prompt, 10) task.wait(0.2)
         end
     end
     -- Regar
     for _, data in ipairs(pots) do
-        if not FARM_RUNNING then return false end
+        if not _G.EXE.FARM_RUNNING then return false end
         local prompt = F_GET_PROMPT(data)
         if not prompt then continue end
         char = F_GO_POT(data)
         if not prompt.Enabled then F_WAIT_ON(prompt, 15) end
         F_EQUIP(char, "Watering Can")
-        fireproximityprompt(prompt)
+        F_HOLD(prompt)
         F_WAIT_OFF(prompt, 30) F_WAIT_ON(prompt, 15) task.wait(0.2)
     end
     -- Fertilizar
     for _, data in ipairs(pots) do
-        if not FARM_RUNNING then return false end
+        if not _G.EXE.FARM_RUNNING then return false end
         local prompt = F_GET_PROMPT(data)
         if not prompt or F_COUNT("Fertilizer") <= 0 then continue end
         char = F_GO_POT(data)
         if not prompt.Enabled then F_WAIT_ON(prompt, 15) end
         task.wait(0.5) F_EQUIP(char, "Fertilizer") task.wait(0.3)
-        fireproximityprompt(prompt)
+        F_HOLD(prompt)
         F_WAIT_OFF(prompt, 30) task.wait(0.3)
     end
     return true
@@ -3455,23 +4416,23 @@ end
 local function F_PLANT_WAVE_B(pots)
     local char
     for _, data in ipairs(pots) do
-        if not FARM_RUNNING then return false end
+        if not _G.EXE.FARM_RUNNING then return false end
         local prompt = F_GET_PROMPT(data)
         if not prompt then continue end
         char = F_GO_POT(data)
         if not F_GET_POT(data):GetAttribute("Seeds") and F_COUNT("Seeds") > 0 then
             F_EQUIP(char, "Seeds")
-            fireproximityprompt(prompt)
+            F_HOLD(prompt)
             F_WAIT_OFF(prompt, 10) F_WAIT_ON(prompt, 10) task.wait(0.2)
         end
         if not prompt.Enabled then F_WAIT_ON(prompt, 15) end
         F_EQUIP(char, "Watering Can")
-        fireproximityprompt(prompt)
+        F_HOLD(prompt)
         F_WAIT_OFF(prompt, 30) F_WAIT_ON(prompt, 15) task.wait(0.2)
         if F_COUNT("Fertilizer") > 0 then
             if not prompt.Enabled then F_WAIT_ON(prompt, 15) end
             task.wait(0.5) F_EQUIP(char, "Fertilizer") task.wait(0.3)
-            fireproximityprompt(prompt)
+            F_HOLD(prompt)
             F_WAIT_OFF(prompt, 30) task.wait(0.3)
         end
     end
@@ -3508,7 +4469,7 @@ local function RUN_FARM_CYCLE()
         local WAVE        = 0
 
         -- Keep buying + planting until no free pots left
-        while FARM_RUNNING do
+        while _G.EXE.FARM_RUNNING do
             -- Select next batch of 4 free pots (excluding already planted)
             local wave_pots = F_SELECT_POTS_EXCL(USED_MAP)
             if #wave_pots == 0 then
@@ -3525,7 +4486,7 @@ local function RUN_FARM_CYCLE()
                 NOTIFY("Farm Beta", "No items on wave " .. WAVE .. ", stopping.", 4)
                 break
             end
-            if not FARM_RUNNING then return false end
+            if not _G.EXE.FARM_RUNNING then return false end
 
             -- Plant this wave using the selected method (A or B)
             NOTIFY("Farm Beta", "Wave " .. WAVE .. " – planting " .. #wave_pots .. " pots to grow...", 3)
@@ -3535,7 +4496,7 @@ local function RUN_FARM_CYCLE()
             else
                 ok = F_PLANT_WAVE_A(wave_pots) -- default A
             end
-            if not ok or not FARM_RUNNING then return false end
+            if not ok or not _G.EXE.FARM_RUNNING then return false end
 
             -- Register these pots as used and planted
             for _, data in ipairs(wave_pots) do
@@ -3556,7 +4517,7 @@ local function RUN_FARM_CYCLE()
         local char = F_SPAWN("Trinity Ave. Plaza")
         F_TP(char, ZONA_SEGURA)
         for _, data in ipairs(ALL_PLANTED) do
-            if not FARM_RUNNING then return false end
+            if not _G.EXE.FARM_RUNNING then return false end
             local prompt = F_GET_PROMPT(data)
             if prompt then F_WAIT_ON(prompt, 180) end
         end
@@ -3567,7 +4528,7 @@ local function RUN_FARM_CYCLE()
         if hum then hum:UnequipTools() task.wait(0.2) end
 
         for i = 1, #ALL_PLANTED, 4 do
-            if not FARM_RUNNING then return false end
+            if not _G.EXE.FARM_RUNNING then return false end
             -- Collect batch of up to 4
             local batch_end = math.min(i + 3, #ALL_PLANTED)
             for j = i, batch_end do
@@ -3575,7 +4536,7 @@ local function RUN_FARM_CYCLE()
                 local prompt = F_GET_PROMPT(data)
                 if not prompt then continue end
                 char = F_GO_POT(data)
-                fireproximityprompt(prompt) task.wait(0.4)
+                F_HOLD(prompt) task.wait(0.4)
             end
             -- Deliver this batch
             NOTIFY("Farm Beta", "Delivering batch " .. math.ceil(i/4) .. "...", 3)
@@ -3615,14 +4576,14 @@ local function RUN_FARM_CYCLE()
     elseif MODO_FARM == "B" then
         ok = F_PLANT_WAVE_B(pots)
     end
-    if not ok or not FARM_RUNNING then return false end
+    if not ok or not _G.EXE.FARM_RUNNING then return false end
 
     -- 4. Zona segura → esperar
     NOTIFY("Farm", "Waiting for plants to grow...", 5)
     char = F_SPAWN("Trinity Ave. Plaza")
     F_TP(char, ZONA_SEGURA)
     for _, data in ipairs(pots) do
-        if not FARM_RUNNING then return false end
+        if not _G.EXE.FARM_RUNNING then return false end
         local prompt = F_GET_PROMPT(data)
         if prompt then F_WAIT_ON(prompt, 120) end
     end
@@ -3632,11 +4593,11 @@ local function RUN_FARM_CYCLE()
     local hum = (LPLR.Character or LPLR.CharacterAdded:Wait()):FindFirstChildOfClass("Humanoid")
     if hum then hum:UnequipTools() task.wait(0.2) end
     for _, data in ipairs(pots) do
-        if not FARM_RUNNING then return false end
+        if not _G.EXE.FARM_RUNNING then return false end
         local prompt = F_GET_PROMPT(data)
         if not prompt then continue end
         char = F_GO_POT(data)
-        fireproximityprompt(prompt) task.wait(0.4)
+        F_HOLD(prompt) task.wait(0.4)
     end
 
     -- 6. Entregar
@@ -3658,19 +4619,19 @@ end
 local FARM_PILL_RESET_CB = nil  -- set by UI to reset toggle pill on stop
 
 local function START_FARM_LOOP()
-    FARM_THREAD = task.spawn(function()
-        while FARM_RUNNING do
+    _G.EXE.FARM_THREAD = task.spawn(function()
+        while _G.EXE.FARM_RUNNING do
             pcall(RUN_FARM_CYCLE)
             -- "Finish then stop" → break after one full cycle
             if FARM_STOP_AFTER then break end
             -- Normal stop mid-cycle check
-            if not FARM_RUNNING then break end
+            if not _G.EXE.FARM_RUNNING then break end
             task.wait(1)
         end
         -- Clean up state
-        FARM_RUNNING    = false
+        _G.EXE.FARM_RUNNING    = false
         FARM_STOP_AFTER = false
-        FARM_THREAD     = nil
+        _G.EXE.FARM_THREAD     = nil
         NOTIFY("Farm", "Auto Farm stopped.", 3)
         -- Reset pill to grey
         if FARM_PILL_RESET_CB then FARM_PILL_RESET_CB() end
@@ -3683,7 +4644,7 @@ end
 local FARM_ROW_L, FARM_ROW_R = FARM_ROW()
 
 -- ── PLANT SHOVEL CARD  (left column) ─────────────────────────
-do
+;(function()  -- register isolation: plant shovel card
     local COL_L = FARM_ROW_L
 
     -- Card wrapper
@@ -3708,25 +4669,25 @@ do
 
     -- ── HEADER ──────────────────────────────────────────────
     local HDR = Instance.new("Frame", CARD)
-    HDR.Size = UDim2.new(1, 0, 0, 28)
+    HDR.Size = UDim2.new(1, 0, 0, 35)
     HDR.BackgroundTransparency = 1
     HDR.LayoutOrder = 0
 
     local ICN = Instance.new("ImageLabel", HDR)
-    ICN.Size = UDim2.new(0, 24, 0, 24)
-    ICN.Position = UDim2.new(0, 0, 0.5, -12)
+    ICN.Size = UDim2.new(0, 32, 0, 32)
+    ICN.Position = UDim2.new(0, 0, 0.5, -16)
     ICN.BackgroundTransparency = 1
     ICN.Image = "rbxassetid://93826240341204"
     ICN.ImageColor3 = CFG.COL.ACC
 
     local HTL = Instance.new("TextLabel", HDR)
-    HTL.Size = UDim2.new(1, -34, 1, 0)
-    HTL.Position = UDim2.new(0, 32, 0, 0)
+    HTL.Size = UDim2.new(1, -40, 1, 0)
+    HTL.Position = UDim2.new(0, 40, 0, 0)
     HTL.BackgroundTransparency = 1
     HTL.Text = "Plant Shovel"
     HTL.TextColor3 = CFG.COL.TXT
     HTL.Font = Enum.Font.GothamBold
-    HTL.TextSize = 15
+    HTL.TextSize = 18
     HTL.TextXAlignment = Enum.TextXAlignment.Left
 
     -- Divider
@@ -3749,7 +4710,7 @@ do
     T_LBL.Text = "Auto Plant Farm"
     T_LBL.TextColor3 = CFG.COL.TXT
     T_LBL.Font = Enum.Font.Gotham
-    T_LBL.TextSize = 13
+    T_LBL.TextSize = 14
     T_LBL.TextXAlignment = Enum.TextXAlignment.Left
 
     local T_PILL = Instance.new("Frame", TOG_ROW)
@@ -3853,10 +4814,10 @@ do
 
     B_FINISH.MouseButton1Click:Connect(function()
         SHOW_MODAL(false)
-        -- Keep FARM_RUNNING = true so mid-cycle checks don't abort early
+        -- Keep _G.EXE.FARM_RUNNING = true so mid-cycle checks don't abort early
         -- FARM_STOP_AFTER = true tells the loop to break after this cycle ends
         FARM_STOP_AFTER = true
-        FARM_RUNNING    = true
+        _G.EXE.FARM_RUNNING    = true
         TWN(T_PILL, {BackgroundColor3 = CFG.COL.YEL})
         TWN(T_KNOB, {Position = UDim2.new(0, 23, 0.5, -9)})
         NOTIFY("Farm", "Finishing current cycle... will stop after delivery.", 5)
@@ -3865,11 +4826,11 @@ do
     B_STOP.MouseButton1Click:Connect(function()
         SHOW_MODAL(false)
         -- Kill the thread instantly
-        FARM_RUNNING    = false
+        _G.EXE.FARM_RUNNING    = false
         FARM_STOP_AFTER = false
-        if FARM_THREAD then
-            task.cancel(FARM_THREAD)
-            FARM_THREAD = nil
+        if _G.EXE.FARM_THREAD then
+            task.cancel(_G.EXE.FARM_THREAD)
+            _G.EXE.FARM_THREAD = nil
         end
         TWN(T_PILL, {BackgroundColor3 = CFG.COL.GRY})
         TWN(T_KNOB, {Position = UDim2.new(0, 3, 0.5, -9)})
@@ -3890,7 +4851,7 @@ do
 
     local function SET_FARM_TOG(ON)
         if ON then
-            FARM_RUNNING    = true
+            _G.EXE.FARM_RUNNING    = true
             FARM_STOP_AFTER = false
             TWN(T_PILL, {BackgroundColor3 = CFG.COL.ACC})
             TWN(T_KNOB, {Position = UDim2.new(0, 23, 0.5, -9)})
@@ -3906,7 +4867,7 @@ do
     T_CLK.BackgroundTransparency = 1
     T_CLK.Text = ""
     T_CLK.ZIndex = 5
-    T_CLK.MouseButton1Click:Connect(function() SET_FARM_TOG(not FARM_RUNNING) end)
+    T_CLK.MouseButton1Click:Connect(function() SET_FARM_TOG(not _G.EXE.FARM_RUNNING) end)
 
     -- ── DROPDOWN: SELECT PLANTA ─────────────────────────────
     local function MK_DRP(PARENT, DEFAULT_TXT, LO)
@@ -3932,7 +4893,7 @@ do
         BTN.Text = "  " .. DEFAULT_TXT
         BTN.TextColor3 = CFG.COL.TXT
         BTN.Font = Enum.Font.Gotham
-        BTN.TextSize = 13
+        BTN.TextSize = 14
         BTN.TextXAlignment = Enum.TextXAlignment.Left
         BTN.ZIndex = 11
 
@@ -4087,21 +5048,42 @@ do
     -- ── BUTTON: UPDATE BICARBONATE ───────────────────────────
     local ACT_BTN = Instance.new("TextButton", CARD)
     ACT_BTN.Size = UDim2.new(1, 0, 0, 36)
-    ACT_BTN.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
-    ACT_BTN.BackgroundTransparency = 0.1
+    ACT_BTN.BackgroundColor3 = CFG.COL.BG
+    ACT_BTN.BackgroundTransparency = 0.82
     ACT_BTN.BorderSizePixel = 0
     ACT_BTN.Text = "Upgrade Plant Fertilizer"
     ACT_BTN.TextColor3 = CFG.COL.TXT
     ACT_BTN.Font = Enum.Font.GothamBold
     ACT_BTN.TextSize = 13
     ACT_BTN.LayoutOrder = 6
-    RND(ACT_BTN, 8)
+    ACT_BTN.AutoButtonColor = false
+    RND(ACT_BTN, 10)
+
+    local BTN_STR = STR(ACT_BTN, CFG.COL.ACC, 1.2)
+    BTN_STR.Transparency = 0.8
+    BTN_STR.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+    local BTN_GRAD = Instance.new("UIGradient", ACT_BTN)
+    BTN_GRAD.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.new(1,1,1)),
+        ColorSequenceKeypoint.new(1, Color3.new(0.8,0.8,0.8))
+    })
+    BTN_GRAD.Rotation = 45
+    BTN_GRAD.Transparency = NumberSequence.new(0.5)
+
+    ACT_BTN.MouseEnter:Connect(function()
+        TWN(ACT_BTN, {BackgroundTransparency = 0.7, BackgroundColor3 = CFG.COL.ACC}, 0.2)
+        TWN(BTN_STR, {Transparency = 0.5}, 0.2)
+    end)
+    ACT_BTN.MouseLeave:Connect(function()
+        TWN(ACT_BTN, {BackgroundTransparency = 0.82, BackgroundColor3 = CFG.COL.BG}, 0.2)
+        TWN(BTN_STR, {Transparency = 0.8}, 0.2)
+    end)
 
     ACT_BTN.MouseButton1Click:Connect(function()
-        -- Press animation
-        TWN(ACT_BTN, {BackgroundColor3 = CFG.COL.ACC, TextColor3 = Color3.new(0,0,0)}, 0.1)
-        task.wait(0.15)
-        TWN(ACT_BTN, {BackgroundColor3 = Color3.fromRGB(30,30,40), TextColor3 = CFG.COL.TXT}, 0.25)
+        TWN(ACT_BTN, {BackgroundTransparency = 0.4, TextSize = 12}, 0.1)
+        task.wait(0.1)
+        TWN(ACT_BTN, {BackgroundTransparency = 0.7, TextSize = 13}, 0.1)
 
         -- Read level before
         local lvlBefore = 0
@@ -4132,11 +5114,10 @@ do
             NOTIFY("Bicarbonate", "❌ Purchase failed.", 4)
         end
     end)
-end
+end)()
 
 -- ── CANDY FARM STATE + LOGIC ─────────────────────────────
-local CC_RUNNING = false
-local CC_THREAD  = nil
+-- (Flags now in _G.EXE)
 local CC_N_HORNOS = 2  -- default
 
 local RS_CC = game:GetService("ReplicatedStorage")
@@ -4147,11 +5128,11 @@ local CC_POS_SHOP  = Vector3.new(-411.15,  4.85,  459.43)
 local CC_POS_VENTA = Vector3.new(  62.55,  4.10, -153.50)
 local CC_ZONA_SEG  = Vector3.new(-222.87, -30.70, 453.41)
 
-local function CC_STOP_CHECK() return not CC_RUNNING end
+local function CC_STOP_CHECK() return not _G.EXE.CC_RUNNING end
 
 local function CC_SPAWN_TP(pos)
     if CC_STOP_CHECK() then return end
-    BYPASS_TP(pos)
+    TP_CLASSIC(pos)
     task.wait(0.1)
 end
 
@@ -4163,6 +5144,40 @@ local function CC_EQUIP(name)
     hum:UnequipTools() task.wait(0.15)
     local tool = LPLR.Backpack:FindFirstChild(name)
     if tool then hum:EquipTool(tool) task.wait(0.3) end
+end
+
+-- Hold helper (igual que BF_HOLD: sujeta el prompt por su HoldDuration)
+local function CC_HOLD(prompt)
+    if not prompt or not prompt.Enabled then return end
+    local dur = prompt.HoldDuration
+    if dur and dur > 0 then
+        -- Enfocar camara al prompt
+        local cam  = workspace.CurrentCamera
+        local char = LPLR.Character
+        local hrp  = char and char:FindFirstChild("HumanoidRootPart")
+        local targetPos = prompt.Parent and prompt.Parent:IsA("BasePart")
+            and prompt.Parent.Position
+            or (prompt.Parent and prompt.Parent:IsA("Attachment")
+            and prompt.Parent.WorldPosition)
+            or nil
+        if hrp and targetPos then
+            cam.CameraType = Enum.CameraType.Scriptable
+            cam.CFrame = CFrame.new(hrp.Position + Vector3.new(0, 1.5, 0), targetPos)
+        end
+        -- Hacer hold
+        pcall(function()
+            prompt:InputHoldBegin()
+            task.wait(dur + 0.3)
+            prompt:InputHoldEnd()
+        end)
+        -- Restaurar camara
+        pcall(function()
+            if char then cam.CameraSubject = char:FindFirstChildOfClass("Humanoid") end
+            cam.CameraType = Enum.CameraType.Custom
+        end)
+    else
+        fireproximityprompt(prompt)
+    end
 end
 
 local function CC_COUNT(name)
@@ -4224,7 +5239,7 @@ local function CC_PUT_GELATIN(idx)
         if hum then hum:UnequipTools() end
         local tool = LPLR.Backpack:FindFirstChild("Raw Gelatin")
         if tool and hum then hum:EquipTool(tool) task.wait(0.05) end
-        fireproximityprompt(CC_GET_PROMPT(idx))
+        CC_HOLD(CC_GET_PROMPT(idx))
         local t = 0
         while t < 2 do
             task.wait(0.1) t += 0.1
@@ -4274,7 +5289,7 @@ local function CC_DO_CYCLE()
             local hum  = char:FindFirstChildOfClass("Humanoid")
             if hum then hum:UnequipTools() end
             task.wait(0.15)
-            fireproximityprompt(CC_GET_PROMPT(idx))
+            CC_HOLD(CC_GET_PROMPT(idx))
             CC_WAIT_OFF(idx, 10)
         end
     end
@@ -4297,14 +5312,13 @@ local function CC_DO_CYCLE()
             local _c = LPLR.Character; local _h = _c and _c:FindFirstChild("HumanoidRootPart")
             if _h and (_h.Position - _ccPos).Magnitude < 60 then break end
         until _w > 3
-        local hrp = (LPLR.Character or LPLR.CharacterAdded:Wait()):FindFirstChild("HumanoidRootPart")
-        if hrp then hrp.CFrame = CFrame.new(CC_GET_POS(idx)) end
-        task.wait(0.4)
+        TP_CLASSIC(CC_GET_POS(idx))
+        task.wait(0.2)
 
         CC_PUT_GELATIN(idx)
         CC_WAIT_PROMPT(idx, "Add Ingredients", 15)
         CC_EQUIP("Seasoning")
-        fireproximityprompt(CC_GET_PROMPT(idx))
+        CC_HOLD(CC_GET_PROMPT(idx))
         CC_WAIT_OFF(idx, 5)
         local char = LPLR.Character or LPLR.CharacterAdded:Wait()
         local hum  = char:FindFirstChildOfClass("Humanoid")
@@ -4312,7 +5326,7 @@ local function CC_DO_CYCLE()
 
         CC_WAIT_PROMPT(idx, "Add Ingredients", 15)
         CC_EQUIP("Bi-Carb")
-        fireproximityprompt(CC_GET_PROMPT(idx))
+        CC_HOLD(CC_GET_PROMPT(idx))
         CC_WAIT_OFF(idx, 5)
         if hum then hum:UnequipTools() end task.wait(0.1)
     end
@@ -4320,6 +5334,15 @@ local function CC_DO_CYCLE()
     -- 5. Recoger
     CC_SPAWN_TP(CC_ZONA_SEG)
     NOTIFY("Candy Farm", "Cooking... waiting to collect.", 4)
+
+    local function CC_HAS_GELATIN()
+        -- Revisa backpack y equipado
+        if LPLR.Backpack:FindFirstChild("Gelatin Brick") then return true end
+        local char = LPLR.Character
+        if char and char:FindFirstChild("Gelatin Brick") then return true end
+        return false
+    end
+
     for _, idx in ipairs(ovens) do
         if CC_STOP_CHECK() then return end
         -- Wait for Collect
@@ -4330,13 +5353,29 @@ local function CC_DO_CYCLE()
             if p.Enabled and p.ActionText == "Collect" then break end
             task.wait(0.2) t += 0.2
         end
-        CC_SPAWN_TP(CC_GET_POS(idx))
-        CC_WAIT_PROMPT(idx, "Collect", 10)
-        local char = LPLR.Character or LPLR.CharacterAdded:Wait()
-        local hum  = char:FindFirstChildOfClass("Humanoid")
-        if hum then hum:UnequipTools() end task.wait(0.15)
-        fireproximityprompt(CC_GET_PROMPT(idx))
-        CC_WAIT_OFF(idx, 10)
+
+        -- Recoger con retry: si no aparece el Gelatin Brick, volver a intentar
+        local collected = false
+        for attempt = 1, 4 do
+            if CC_STOP_CHECK() then return end
+            CC_SPAWN_TP(CC_GET_POS(idx))
+            CC_WAIT_PROMPT(idx, "Collect", 10)
+            local char = LPLR.Character or LPLR.CharacterAdded:Wait()
+            local hum  = char:FindFirstChildOfClass("Humanoid")
+            if hum then hum:UnequipTools() end task.wait(0.15)
+            CC_HOLD(CC_GET_PROMPT(idx))
+            CC_WAIT_OFF(idx, 10)
+            task.wait(0.3)
+            if CC_HAS_GELATIN() then
+                collected = true
+                break
+            end
+            -- No se recibio — reintentar de inmediato
+            NOTIFY("Candy Farm", "No recibido, reintentando... (" .. attempt .. "/4)", 2)
+        end
+        if not collected then
+            NOTIFY("Candy Farm", "⚠️ Could not pick up oven " .. idx, 3)
+        end
     end
 
     -- 6. Vender
@@ -4353,31 +5392,31 @@ local function CC_DO_CYCLE()
 end
 
 local function CC_START()
-    CC_RUNNING = true
-    CC_THREAD = task.spawn(function()
+    _G.EXE.CC_RUNNING = true
+    _G.EXE.CC_THREAD = task.spawn(function()
         NOTIFY("Candy Farm", "Started! Ovens: " .. CC_N_HORNOS, 3)
-        while CC_RUNNING do
+        while _G.EXE.CC_RUNNING do
             local ok, err = pcall(CC_DO_CYCLE)
             if not ok then
                 NOTIFY("Candy Farm", "Error: " .. tostring(err), 4)
                 task.wait(2)
             end
-            if CC_RUNNING then task.wait(0.5) end
+            if _G.EXE.CC_RUNNING then task.wait(0.5) end
         end
         NOTIFY("Candy Farm", "Stopped.", 3)
     end)
 end
 
 local function CC_STOP()
-    CC_RUNNING = false
-    if CC_THREAD then
-        task.cancel(CC_THREAD)
-        CC_THREAD = nil
+    _G.EXE.CC_RUNNING = false
+    if _G.EXE.CC_THREAD then
+        task.cancel(_G.EXE.CC_THREAD)
+        _G.EXE.CC_THREAD = nil
     end
 end
 
 -- ── CANDY FARM UI CARD (left column, below Plant Shovel) ──
-do
+;(function()  -- register isolation: candy farm UI
     local CC_CARD = Instance.new("Frame", FARM_ROW_L)
     CC_CARD.Size = UDim2.new(1, 0, 0, 0)
     CC_CARD.AutomaticSize = Enum.AutomaticSize.Y
@@ -4400,25 +5439,25 @@ do
 
     -- Header
     local CC_HDR = Instance.new("Frame", CC_CARD)
-    CC_HDR.Size = UDim2.new(1, 0, 0, 28)
+    CC_HDR.Size = UDim2.new(1, 0, 0, 35)
     CC_HDR.BackgroundTransparency = 1
     CC_HDR.LayoutOrder = 0
 
     local CC_ICN = Instance.new("ImageLabel", CC_HDR)
-    CC_ICN.Size = UDim2.new(0, 24, 0, 24)
-    CC_ICN.Position = UDim2.new(0, 0, 0.5, -12)
+    CC_ICN.Size = UDim2.new(0, 32, 0, 32)
+    CC_ICN.Position = UDim2.new(0, 0, 0.5, -16)
     CC_ICN.BackgroundTransparency = 1
     CC_ICN.Image = "rbxassetid://84180289173085"
     CC_ICN.ImageColor3 = CFG.COL.YEL
 
     local CC_HTL = Instance.new("TextLabel", CC_HDR)
-    CC_HTL.Size = UDim2.new(1, -34, 1, 0)
-    CC_HTL.Position = UDim2.new(0, 32, 0, 0)
+    CC_HTL.Size = UDim2.new(1, -40, 1, 0)
+    CC_HTL.Position = UDim2.new(0, 40, 0, 0)
     CC_HTL.BackgroundTransparency = 1
     CC_HTL.Text = "Candy Farm"
     CC_HTL.TextColor3 = CFG.COL.TXT
     CC_HTL.Font = Enum.Font.GothamBold
-    CC_HTL.TextSize = 15
+    CC_HTL.TextSize = 18
     CC_HTL.TextXAlignment = Enum.TextXAlignment.Left
 
     -- Divider
@@ -4441,7 +5480,7 @@ do
     CC_LBL.Text = "Auto Candy Farm"
     CC_LBL.TextColor3 = CFG.COL.TXT
     CC_LBL.Font = Enum.Font.Gotham
-    CC_LBL.TextSize = 13
+    CC_LBL.TextSize = 14
     CC_LBL.TextXAlignment = Enum.TextXAlignment.Left
 
     local CC_PILL = Instance.new("Frame", CC_TOG_ROW)
@@ -4460,7 +5499,7 @@ do
 
     local function SET_CC_TOG(ON)
         if ON then
-            CC_RUNNING = true
+            _G.EXE.CC_RUNNING = true
             TWN(CC_PILL, {BackgroundColor3 = CFG.COL.YEL})
             TWN(CC_KNOB, {Position = UDim2.new(0, 23, 0.5, -9)})
             CC_START()
@@ -4477,7 +5516,7 @@ do
     CC_CLK.Text = ""
     CC_CLK.ZIndex = 5
     CC_CLK.MouseButton1Click:Connect(function()
-        SET_CC_TOG(not CC_RUNNING)
+        SET_CC_TOG(not _G.EXE.CC_RUNNING)
     end)
 
     -- Dropdown: N_HORNOS
@@ -4569,16 +5608,18 @@ do
         end)
     end
     CC_DRP_SCR.CanvasSize = UDim2.new(0, 0, 0, CC_DRP_LAY.AbsoluteContentSize.Y)
-end
+end)()
+-- Variables de estado Card Farm hoisted al scope externo para evitar limit-200
+local CF_TARJETA  = "Premium Card"
+local CF_COSTO    = 2600
+local CF_OBJETIVO = 3600
+local _CF_COL_R2  = FARM_ROW_R
+
 do
-    local COL_R2 = FARM_ROW_R
+    local COL_R2 = _CF_COL_R2
 
     -- ── CARD FARM STATE ─────────────────────────────────────
-    local CF_RUNNING     = false
-    local CF_THREAD      = nil
-    local CF_TARJETA     = "Premium Card"
-    local CF_COSTO       = 2600
-    local CF_OBJETIVO    = 3600
+    -- (Flags now in _G.EXE)
 
     local CF_RIESGO_MAP = {
         [1000] = {0.35, 0.50},
@@ -4615,7 +5656,7 @@ do
 
 
     local function CF_TP(pos)
-        BYPASS_TP(pos)
+        TP_CLASSIC(pos)
         task.wait(0.1)
     end
 
@@ -4636,9 +5677,9 @@ do
         if not prompt then return end
         prompt:InputHoldBegin()
         if prompt.HoldDuration > 0 then
-            task.wait(prompt.HoldDuration)
+            task.wait(prompt.HoldDuration + 0.2)
         else
-            task.wait()
+            task.wait(0.25)
         end
         prompt:InputHoldEnd()
     end
@@ -4664,7 +5705,7 @@ do
             
             -- Wait up to 5s for the card to appear
             local t = 0
-            while t < 5 and CF_RUNNING do
+            while t < 5 and _G.EXE.CF_RUNNING do
                 task.wait(0.5); t += 0.5
                 char = LPLR.Character or LPLR.CharacterAdded:Wait()
                 if LPLR.Backpack:FindFirstChild(CF_TARJETA) or char:FindFirstChild(CF_TARJETA) then
@@ -4676,7 +5717,7 @@ do
             task.wait(0.1)
         end
 
-        NOTIFY("Card Farm", "❌ Falló la compra tras 5 intentos", 5)
+        NOTIFY("Card Farm", "❌ Purchase failed after 5 attempts", 5)
         return false
     end
 
@@ -4702,34 +5743,59 @@ do
             local char = LPLR.Character or LPLR.CharacterAdded:Wait()
             local hrp = char:WaitForChild("HumanoidRootPart")
             CF_SPAWN("Trinity Ave. Plaza")
-            CF_TP(pp.Position + Vector3.new(0, 3, 3))
+            
+            -- TP un poco más cerca/directo
+            CF_TP(pp.Position + Vector3.new(0, 0, 1.2))
             task.wait(0.5)
             CF_EQUIP(CF_TARJETA)
             task.wait(0.3)
 
-            -- Cámara Scriptable apuntando al ATM
+            -- Cámara Scriptable apuntando al ATM para mejor registro
             local cam = workspace.CurrentCamera
             local prevType    = cam.CameraType
             local prevSubject = cam.CameraSubject
             cam.CameraType = Enum.CameraType.Scriptable
             cam.CFrame = CFrame.new(hrp.Position + Vector3.new(0, 2, 0), pp.Position)
 
-            -- Activar skim
+            -- Variable para confirmar inicio real
+            local confirmed = false
+            local conn
+            conn = CF_Update.OnClientEvent:Connect(function() 
+                confirmed = true 
+                if conn then conn:Disconnect() conn = nil end
+            end)
+
+            -- Activar skim con el buffer mejorado
             TriggerPrompt(prompt)
-            task.wait(1)
+            
+            -- Esperar confirmación del servidor o desaparición del prompt (max 2.5s)
+            local waitStart = tick()
+            while tick() - waitStart < 2.5 and not confirmed and _G.EXE.CF_RUNNING do
+                -- Si el prompt se desactiva o desaparece, el inicio es exitoso (feedback del usuario)
+                if not prompt.Enabled or not prompt.Parent then
+                    confirmed = true
+                    break
+                end
+                task.wait(0.1)
+            end
 
             -- Restaurar cámara
-            cam.CameraSubject = char:WaitForChild("Humanoid")
+            if conn then conn:Disconnect() conn = nil end
+            cam.CameraSubject = char:FindFirstChildOfClass("Humanoid") or LPLR.Character:FindFirstChildOfClass("Humanoid")
             cam.CameraType    = prevType
 
-            -- Verificar si el skimming inició (basado en si PullOut es visible o recibimos update)
-            -- Como no podemos saberlo instantáneamente sin el evento, usamos un pequeño delay
-            task.wait(1)
-            
-            -- Si el skimming inició, rompemos el bucle de reintento de TP
-            -- Para este script, asumiremos que inició si no falló el VIM
-            skimmingStarted = true 
-            if skimmingStarted then break end
+            if confirmed then
+                skimmingStarted = true
+                break
+            else
+                NOTIFY("Card Farm", "Interaction failed, retrying (" .. tp_attempt .. "/3)...", 3)
+                task.wait(0.5)
+            end
+        end
+
+        if not skimmingStarted then
+            NOTIFY("Card Farm", "❌ Failed to start skimming after 3 attempts", 5)
+            return false, 0
         end
 
         NOTIFY("Card Farm", "Skimming activo...", 3)
@@ -4767,23 +5833,23 @@ do
             end
         end)
 
-        repeat task.wait(0.1) until not active or not CF_RUNNING
+        repeat task.wait(0.1) until not active or not _G.EXE.CF_RUNNING
         task.wait(1)
         return caught, earned
     end
 
     local function CF_START_LOOP(T2_PILL, T2_KNOB)
-        CF_THREAD = task.spawn(function()
-            while CF_RUNNING do
+        _G.EXE.CF_THREAD = task.spawn(function()
+            while _G.EXE.CF_RUNNING do
                 if not CF_BUY(T2_PILL, T2_KNOB) then
                     -- Stop and reset toggle visually
-                    CF_RUNNING = false
-                    CF_THREAD = nil
+                    _G.EXE.CF_RUNNING = false
+                    _G.EXE.CF_THREAD = nil
                     TWN(T2_PILL, {BackgroundColor3 = CFG.COL.GRY})
                     TWN(T2_KNOB, {Position = UDim2.new(0, 3, 0.5, -9)})
                     break
                 end
-                if not CF_RUNNING then break end
+                if not _G.EXE.CF_RUNNING then break end
 
                 local atm, pr = CF_FIND_ATM()
                 if not atm then
@@ -4793,7 +5859,7 @@ do
                 end
 
                 local caught, earned = CF_DO_SKIM(atm, pr)
-                if not CF_RUNNING then break end
+                if not _G.EXE.CF_RUNNING then break end
 
                 if caught then
                     NOTIFY("Card Farm", "Caught — retrying in 3s...", 4)
@@ -4803,14 +5869,19 @@ do
                     task.wait(1)
                 end
             end
-            CF_RUNNING = false
-            CF_THREAD  = nil
+            _G.EXE.CF_RUNNING = false
+            _G.EXE.CF_THREAD  = nil
             NOTIFY("Card Farm", "Auto Card Farm stopped.", 3)
             -- Reset toggle visually
             TWN(T2_PILL, {BackgroundColor3 = CFG.COL.GRY})
             TWN(T2_KNOB, {Position = UDim2.new(0, 3, 0.5, -9)})
         end)
     end
+
+end  -- end Card Farm logic block
+
+do  -- Card Farm UI block (split to avoid local register limit)
+    local COL_R2 = _CF_COL_R2
 
     -- ── CARD WRAPPER ────────────────────────────────────────
     local CARD2 = Instance.new("Frame", COL_R2)
@@ -4901,15 +5972,15 @@ do
                 NOTIFY("Card Farm", "Not enough funds! Need $" .. CF_COSTO .. " have $" .. math.floor(w), 5)
                 return -- don't turn on
             end
-            CF_RUNNING = true
+            _G.EXE.CF_RUNNING = true
             TWN(T2_PILL, {BackgroundColor3 = CFG.COL.ACC})
             TWN(T2_KNOB, {Position = UDim2.new(0, 23, 0.5, -9)})
             NOTIFY("Card Farm", "Started | Card: " .. CF_TARJETA .. " | Target: $" .. CF_OBJETIVO, 4)
             CF_START_LOOP(T2_PILL, T2_KNOB)
         else
             -- Stop immediately
-            CF_RUNNING = false
-            if CF_THREAD then task.cancel(CF_THREAD) CF_THREAD = nil end
+            _G.EXE.CF_RUNNING = false
+            if _G.EXE.CF_THREAD then task.cancel(_G.EXE.CF_THREAD) _G.EXE.CF_THREAD = nil end
             TWN(T2_PILL, {BackgroundColor3 = CFG.COL.GRY})
             TWN(T2_KNOB, {Position = UDim2.new(0, 3, 0.5, -9)})
             NOTIFY("Card Farm", "Stopped.", 3)
@@ -4921,7 +5992,7 @@ do
     T2_CLK.BackgroundTransparency = 1
     T2_CLK.Text = ""
     T2_CLK.ZIndex = 5
-    T2_CLK.MouseButton1Click:Connect(function() SET_CF_TOG(not CF_RUNNING) end)
+    T2_CLK.MouseButton1Click:Connect(function() SET_CF_TOG(not _G.EXE.CF_RUNNING) end)
 
     -- ── INLINE DROPDOWN BUILDER (local to this card) ────────
     local function MK_CF_DRP(DEFAULT_TXT, LO)
@@ -4947,7 +6018,7 @@ do
         BTN.Text = "  " .. DEFAULT_TXT
         BTN.TextColor3 = CFG.COL.TXT
         BTN.Font = Enum.Font.Gotham
-        BTN.TextSize = 13
+        BTN.TextSize = 14
         BTN.TextXAlignment = Enum.TextXAlignment.Left
         BTN.ZIndex = 11
 
@@ -5072,8 +6143,8 @@ end
 -- ============================================================
 
 -- ── WAREHOUSE BOX FARM STATE + LOGIC ────────────────────
-local WH_THREAD  = nil
-local WH_RUNNING = false
+_G.EXE.WH_THREAD  = nil
+_G.EXE.WH_RUNNING = false
 local RS_WH  = game:GetService("ReplicatedStorage")
 
 local WH_CAM_CONN      = nil
@@ -5086,11 +6157,22 @@ local function WH_CAM_RESTORE()
     cam.CameraSubject = WH_CAM_PREV_SUB  or (LPLR.Character and LPLR.Character:FindFirstChildOfClass("Humanoid"))
 end
 
-local function WH_STOP_CHECK() return not WH_RUNNING end
+local function TriggerPrompt(prompt)
+    if not prompt then return end
+    prompt:InputHoldBegin()
+    if prompt.HoldDuration > 0 then
+        task.wait(prompt.HoldDuration + 0.2)
+    else
+        task.wait(0.25)
+    end
+    prompt:InputHoldEnd()
+end
+
+local function WH_STOP_CHECK() return not _G.EXE.WH_RUNNING end
 
 local function WH_TP(pos)
     if WH_STOP_CHECK() then return end
-    BYPASS_TP(pos)
+    TP_CLASSIC(pos)
     task.wait(0.1)
 end
 
@@ -5152,8 +6234,7 @@ local function WH_DO_ONE()
     if tool then LPLR.Character:FindFirstChildOfClass("Humanoid"):EquipTool(tool) end
     task.wait(0.35)
     -- TP without Spawn bypass (direct CFrame only)
-    local hrp = (LPLR.Character or LPLR.CharacterAdded:Wait()):FindFirstChild("HumanoidRootPart")
-    if hrp then hrp.CFrame = CFrame.new(dropPos + Vector3.new(0, 0, 2)) end
+    TP_CLASSIC(dropPos + Vector3.new(0, 0, 2))
     task.wait(0.6)
 
     -- ── Focus Camera on Delivery ────────────────────────────
@@ -5161,37 +6242,59 @@ local function WH_DO_ONE()
     local prevType = cam.CameraType
     local prevSub  = cam.CameraSubject
     cam.CameraType = Enum.CameraType.Scriptable
-    cam.CFrame = CFrame.new(hrp.Position + Vector3.new(0, 2, 0), dropPart.Position)
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if hrp then
+        cam.CFrame = CFrame.new(hrp.Position + Vector3.new(0, 2, 0), dropPart.Position)
+    end
 
-    -- Hold the prompt
-    TriggerPrompt(pp)
-    task.wait(0.2)
+    -- Hold the prompt — retry loop until box leaves inventory
+    local deliveryTimer = 0
+    local maxDeliveryWait = 11  -- max total seconds to wait
+    while _G.EXE.WH_RUNNING and deliveryTimer < maxDeliveryWait do
+        if not WH_HAS("Box") then break end  -- success!
+
+        -- Make sure prompt still valid
+        local freshPP = dropPart:FindFirstChildOfClass("ProximityPrompt")
+        if not freshPP then break end
+
+        -- Re-TP close to drop point so hold doesn't miss
+        TP_CLASSIC(dropPos + Vector3.new(0, 0, 1.5))
+        task.wait(0.1)
+
+        -- Attempt the full hold
+        freshPP:InputHoldBegin()
+        local holdTime = math.max(freshPP.HoldDuration, 0)
+        local held = 0
+        while held < holdTime + 0.15 do
+            if not _G.EXE.WH_RUNNING or not WH_HAS("Box") then break end
+            task.wait(0.05)
+            held += 0.05
+        end
+        freshPP:InputHoldEnd()
+
+        task.wait(0.3)
+        deliveryTimer += (holdTime + 0.3)
+    end
 
     -- Restore Camera
     cam.CameraSubject = LPLR.Character:FindFirstChildOfClass("Humanoid")
     cam.CameraType    = prevType
-    -- Wait for delivery
-    local dt = 0
-    while dt < 6 do
-        if WH_STOP_CHECK() then return false end
-        if not WH_HAS("Box") then return true end
-        task.wait(0.25) dt += 0.25
-    end
-    return false
+
+    return not WH_HAS("Box")
 end
 
 local function WH_START()
     local cam = workspace.CurrentCamera
     WH_CAM_PREV_TYPE = cam.CameraType
     WH_CAM_PREV_SUB  = cam.CameraSubject
-    WH_RUNNING = true
-    WH_THREAD = task.spawn(function()
+    _G.EXE.WH_RUNNING = true
+    _G.EXE.WH_THREAD = task.spawn(function()
         NOTIFY("Box Farm", "Started!", 3)
-        while WH_RUNNING do
+        while _G.EXE.WH_RUNNING do
             local ok, err = pcall(WH_DO_ONE)
             if not ok then
                 NOTIFY("Box Farm", "Error: " .. tostring(err), 4)
-                task.wait(2)
+                task.wait(0.5)  -- retry faster
             end
             task.wait(0.3)
         end
@@ -5200,166 +6303,488 @@ local function WH_START()
 end
 
 local function WH_STOP()
-    WH_RUNNING = false
-    if WH_THREAD then
-        task.cancel(WH_THREAD)
-        WH_THREAD = nil
+    _G.EXE.WH_RUNNING = false
+    if _G.EXE.WH_THREAD then
+        task.cancel(_G.EXE.WH_THREAD)
+        _G.EXE.WH_THREAD = nil
     end
     WH_CAM_RESTORE()
 end
 
--- ── BURGER FARM STATE + LOGIC ────────────────────────────
-local BF_THREAD  = nil
-local BF_RUNNING = false
+;(function()  -- register isolation: burger farm logic
+    -- ============================================================
+    --  BURGER FARM | CEN_V2 Module
+    --  Game: 104802908935290
+    -- ============================================================
 
-local BF_N_GRABBED = false
-local BF_N_PLACED  = false
-local BF_N_READY   = false
+    local LPLR   = game:GetService("Players").LocalPlayer
+    local RS     = game:GetService("ReplicatedStorage")
+    local UIS    = game:GetService("UserInputService")
 
-local RS_BF = game:GetService("ReplicatedStorage")
-RS_BF.Remotes.Notify.OnClientEvent:Connect(function(msg)
-    if typeof(msg) ~= "string" then return end
-    if msg:find("grabbed 1x raw patty")          then BF_N_GRABBED = true
-    elseif msg:find("turn the stove on")          then BF_N_PLACED  = true
-    elseif msg:find("take it out before it burns") then BF_N_READY  = true
+    -- ─── CONFIG ────────────────────────────────────────────────
+    local BF = {}
+    BF.RUNNING = false
+
+    local POS_START     = Vector3.new(-178.45, 4.28, 102.87)
+    local POS_FRIDGE    = Vector3.new(-180.27, 4.28, 110.26)
+
+    local BF_OVEN_DEFS = {
+        { getPrompt = function() return workspace.Jobs.Jerk_Center.Ovens:GetChildren()[1].proxAtt.ProximityPrompt end, pos = Vector3.new(-179.26, 4.85, 107.01) },
+        { getPrompt = function() return workspace.Jobs.Jerk_Center.Ovens:GetChildren()[2].proxAtt.ProximityPrompt end, pos = Vector3.new(-180.04, 4.28, 103.69) },
+        { getPrompt = function() return workspace.Jobs.Jerk_Center.Ovens:GetChildren()[3].proxAtt.ProximityPrompt end, pos = Vector3.new(-179.56, 4.28, 107.00) },
+    }
+
+    -- ─── BYPASS TP ─────────────────────────────────────────────
+    -- Espera a que el spawn point esté listo (fix para cuando te acabas de unir)
+    local SPAWN_PT = nil
+    local SPAWN_POS = nil
+
+    local function BF_INIT_SPAWN()
+        if SPAWN_PT then return end
+        local assets = workspace:WaitForChild("spawn_Assets", 10)
+        if not assets then warn("[BF] spawn_Assets no encontrado") return end
+        local points = assets:WaitForChild("Points", 10)
+        if not points then warn("[BF] Points no encontrado") return end
+        SPAWN_PT  = points:WaitForChild("Trinity Ave. Plaza", 10)
+        if SPAWN_PT then
+            SPAWN_POS = SPAWN_PT.Position
+        else
+            warn("[BF] Trinity Ave. Plaza no encontrado")
+        end
     end
-end)      
 
-local BF_OVEN_DEFS = {
-    { getPrompt = function() return workspace.Jobs.Jerk_Center.Ovens:GetChildren()[1].proxAtt.ProximityPrompt end, pos = Vector3.new(-180.72, 4.27, 106.95) },
-    { getPrompt = function() return workspace.Jobs.Jerk_Center.Ovens:GetChildren()[2].proxAtt.ProximityPrompt end, pos = Vector3.new(-180.04, 4.28, 103.69) },
-    { getPrompt = function() return workspace.Jobs.Jerk_Center.Ovens:GetChildren()[3].proxAtt.ProximityPrompt end, pos = Vector3.new(-180.42, 4.28, 100.16) },
-}
-local BF_OVEN_IDX = 1
+    local function BYPASS_TP(pos)
+        BF_INIT_SPAWN()
+        if not SPAWN_PT then
+            warn("[BF] No hay spawn point, TP directo sin bypass")
+            local char = LPLR.Character or LPLR.CharacterAdded:Wait()
+            local hrp  = char:WaitForChild("HumanoidRootPart")
+            hrp.CFrame = CFrame.new(pos)
+            return
+        end
+        local char = LPLR.Character or LPLR.CharacterAdded:Wait()
+        local hrp  = char:WaitForChild("HumanoidRootPart")
 
-local function BF_TP(pos)
-    BYPASS_TP(pos)
-    task.wait(0.1)
-end
+        -- Mandar al spawn
+        RS.Remotes.Spawn:FireServer(SPAWN_PT)
 
-local function BF_EQUIP(name)
-    local char = LPLR.Character or LPLR.CharacterAdded:Wait()
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    if not hum then return end
-    hum:UnequipTools() task.wait(0.15)
-    local tool = LPLR.Backpack:FindFirstChild(name) or char:FindFirstChild(name)
-    if tool then hum:EquipTool(tool) task.wait(0.3) end
-end
+        -- Esperar a llegar al spawn
+        local waited = 0
+        repeat
+            task.wait(0.05)
+            waited += 0.05
+            char = LPLR.Character or LPLR.CharacterAdded:Wait()
+            hrp  = char:WaitForChild("HumanoidRootPart")
+        until (hrp.Position - SPAWN_POS).Magnitude < 50 or waited > 5
 
-local function BF_HAS(name)
-    if LPLR.Backpack:FindFirstChild(name) then return true end
-    local char = LPLR.Character
-    return char and char:FindFirstChild(name) ~= nil
-end
-
-local function BF_WAIT_FLAG(fn, timeout)
-    local t = 0
-    while t < (timeout or 30) do
-        if fn() then return true end
-        task.wait(0.1) t += 0.1
-    end
-    return false
-end
-
-local function BF_IN_JOB()
-    local ok, val = pcall(function() return LPLR.Job_Data.CurrentJob.Value end)
-    return ok and val == "JerkChef"
-end
-
-local function BF_DELIVER()
-    if not BF_HAS("Cooked Patty") then return false end
-    BF_EQUIP("Cooked Patty") task.wait(0.3)
-    local char = LPLR.Character or LPLR.CharacterAdded:Wait()
-    local tool = char:FindFirstChild("Cooked Patty")
-    if not tool then return false end
-    local handle = tool:FindFirstChild("Handle")
-    local pp = handle and handle:FindFirstChild("ProximityPrompt")
-    if not pp then return false end
-    local t = 0
-    while not pp.Enabled and t < 10 do task.wait(0.1) t += 0.1 end
-    if not pp.Enabled then return false end
-    fireproximityprompt(pp)
-    local dt = 0
-    while dt < 10 do
-        task.wait(0.2) dt += 0.2
-        if not BF_HAS("Cooked Patty") then return true end
-    end
-    if pp.Enabled then fireproximityprompt(pp) task.wait(1) end
-    return not BF_HAS("Cooked Patty")
-end
-
-local function BF_DO_ONE()
-    if not BF_IN_JOB() then
-        BF_TP(Vector3.new(-173.59, 4.28, 106.01))
-        task.wait(0.4)
-        RS_BF.Remotes.JobAction:FireServer("StartJob", "JerkChef")
-        task.wait(1)
-    end
-    if BF_HAS("Cooked Patty") and BF_HAS("Patty") then
-        BF_DELIVER()
-    end
-    local oven = BF_OVEN_DEFS[BF_OVEN_IDX]
-    if not BF_HAS("Patty") then
-        BF_N_GRABBED = false
-        BF_TP(Vector3.new(-179.90, 4.28, 110.02))
+        -- Esperar un poco en el spawn para que el servidor registre la posicion
         task.wait(0.3)
-        fireproximityprompt(workspace.Jobs.Jerk_Center.ingredientsProx.ProximityPrompt)
-        if not BF_WAIT_FLAG(function() return BF_N_GRABBED end, 10) then return false end
+
+        -- TP al destino en loop hasta que se quede (anti-rollback)
+        local tpWaited = 0
+        repeat
+            char = LPLR.Character or LPLR.CharacterAdded:Wait()
+            hrp  = char:WaitForChild("HumanoidRootPart")
+            hrp.CFrame = CFrame.new(pos)
+            task.wait(0.1)
+            tpWaited += 0.1
+            char = LPLR.Character or LPLR.CharacterAdded:Wait()
+            hrp  = char:WaitForChild("HumanoidRootPart")
+        until (hrp.Position - pos).Magnitude < 5 or tpWaited > 3
+
     end
-    BF_N_PLACED = false
-    BF_TP(oven.pos) task.wait(0.2)
-    BF_EQUIP("Patty") task.wait(0.2)
-    TriggerPrompt(oven.getPrompt())
-    if not BF_WAIT_FLAG(function() return BF_N_PLACED end, 5) then
-        BF_OVEN_IDX = (BF_OVEN_IDX % #BF_OVEN_DEFS) + 1
+
+    -- ─── HELPERS ───────────────────────────────────────────────
+    local function BF_HAS(itemName)
+        -- Check backpack
+        if LPLR.Backpack:FindFirstChild(itemName) then return true end
+        -- Check equipped (character)
+        local char = LPLR.Character
+        if char and char:FindFirstChild(itemName) then return true end
         return false
     end
-    task.wait(1.0)
-    TriggerPrompt(oven.getPrompt())
-    task.wait(0.3)
-    BF_N_READY = false
-    if not BF_WAIT_FLAG(function() return BF_N_READY end, 90) then return false end
-    BF_TP(oven.pos) task.wait(0.2)
-    TriggerPrompt(oven.getPrompt())
-    local wt = 0
-    while wt < 10 do
-        if BF_HAS("Cooked Patty") then break end
-        task.wait(0.2) wt += 0.2
-    end
-    if not BF_HAS("Cooked Patty") then return false end
-    task.wait(0.2)
-    BF_DELIVER()
-    BF_OVEN_IDX = (BF_OVEN_IDX % #BF_OVEN_DEFS) + 1
-    local char = LPLR.Character or LPLR.CharacterAdded:Wait()
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    if hum then hum:UnequipTools() end
-    task.wait(0.2)
-    return true
-end
 
-local function BF_START()
-    BF_RUNNING = true
-    BF_THREAD = task.spawn(function()
-        NOTIFY("Burger Farm", "Started!", 3)
-        while BF_RUNNING do
-            local ok, err = pcall(BF_DO_ONE)
-            if not ok then
-                NOTIFY("Burger Farm", "Error: " .. tostring(err), 4)
-                task.wait(2)
-            end
+    local function BF_GET_ITEM(itemName)
+        if LPLR.Backpack:FindFirstChild(itemName) then
+            return LPLR.Backpack[itemName]
+        end
+        local char = LPLR.Character
+        if char and char:FindFirstChild(itemName) then
+            return char[itemName]
+        end
+        return nil
+    end
+
+    local function BF_EQUIP(itemName)
+        local item = LPLR.Backpack:FindFirstChild(itemName)
+        if item then
+            LPLR.Character.Humanoid:EquipTool(item)
             task.wait(0.3)
         end
-        NOTIFY("Burger Farm", "Stopped.", 3)
-    end)
-end
-
-local function BF_STOP()
-    BF_RUNNING = false
-    if BF_THREAD then
-        task.cancel(BF_THREAD)
-        BF_THREAD = nil
     end
-end
+
+    -- ─── CAMERA FOCUS ──────────────────────────────────────────
+    local function BF_FOCUS_CAM(targetPos)
+        local cam  = workspace.CurrentCamera
+        local char = LPLR.Character or LPLR.CharacterAdded:Wait()
+        local hrp  = char:FindFirstChild("HumanoidRootPart")
+        cam.CameraType = Enum.CameraType.Scriptable
+        if hrp then
+            cam.CFrame = CFrame.new(hrp.Position + Vector3.new(0, 1.5, 0), targetPos)
+        end
+    end
+
+    local function BF_RESTORE_CAM()
+        local cam  = workspace.CurrentCamera
+        local char = LPLR.Character
+        if char then
+            cam.CameraSubject = char:FindFirstChildOfClass("Humanoid")
+        end
+        cam.CameraType = Enum.CameraType.Custom
+    end
+
+    -- ─── PROMPT INTERACTION ────────────────────────────────────
+    -- Usa InputHoldBegin/End (metodo confirmado en Potassium)
+    local function BF_HOLD(prompt)
+        local ok, err = pcall(function()
+            prompt:InputHoldBegin()
+            task.wait(prompt.HoldDuration + 0.3)
+            prompt:InputHoldEnd()
+        end)
+        if not ok then
+            warn("[BF] BF_HOLD error: " .. tostring(err))
+        end
+    end
+
+    -- TP corto — sin bypass, solo mueve el CFrame (para distancias cercanas)
+    local function SHORT_TP(pos)
+        local char = LPLR.Character or LPLR.CharacterAdded:Wait()
+        local hrp  = char:WaitForChild("HumanoidRootPart")
+        hrp.CFrame = CFrame.new(pos)
+        task.wait(0.2)
+    end
+
+    -- Para prompts que aceptan fireproximityprompt normal (fridge, cooked patty handle)
+    local function BF_FIRE(prompt)
+        fireproximityprompt(prompt)
+    end
+
+    -- ─── NOTIFY LISTENER ───────────────────────────────────────
+    local BF_NOTIFY_MSG  = ""
+    local BF_OVEN_BUSY   = false  -- true cuando hay una patty en proceso
+    local BF_STOVE_BUSY  = false  -- true cuando el horno destino esta en uso por otro jugador
+
+    local function BF_LISTEN_NOTIFY()
+        local notifyEvent = RS.Remotes.Notify
+        notifyEvent.OnClientEvent:Connect(function(msg)
+            BF_NOTIFY_MSG = msg or ""
+
+            -- Detectar patty en proceso (horno ocupado propio)
+            if BF_NOTIFY_MSG:find("Finish preparing your current burger") then
+                BF_OVEN_BUSY = true
+            end
+            -- Cuando se recoge la patty cocida, el horno queda libre
+            if BF_NOTIFY_MSG:find("successfully cooked") then
+                BF_OVEN_BUSY = false
+            end
+            -- Horno en uso por otro jugador — cambiar de inmediato
+            if BF_NOTIFY_MSG:find("Stove is currently in use") then
+                BF_STOVE_BUSY = true
+            end
+        end)
+    end
+
+    local function BF_WAIT_NOTIFY(keyword, timeout)
+        timeout = timeout or 30
+        local elapsed = 0
+        repeat
+            task.wait(0.2)
+            elapsed += 0.2
+        until BF_NOTIFY_MSG:find(keyword) or elapsed >= timeout
+        BF_NOTIFY_MSG = ""
+        return elapsed < timeout
+    end
+
+    -- Espera hasta que el horno no esté ocupado (max 90s)
+    local function BF_WAIT_IF_BUSY()
+        if not BF_OVEN_BUSY then return end
+        local elapsed = 0
+        repeat
+            task.wait(0.5)
+            elapsed += 0.5
+        until not BF_OVEN_BUSY or elapsed >= 90
+        if BF_OVEN_BUSY then
+            warn("[BF] Timeout waiting for oven, forcing busy flag reset.")
+            BF_OVEN_BUSY = false
+        end
+    end
+
+    -- ─── JOB CHECK ─────────────────────────────────────────────
+    local function BF_IS_ON_JOB()
+        local jobData = LPLR:FindFirstChild("Job_Data")
+        if jobData then
+            local currentJob = jobData:FindFirstChild("CurrentJob")
+            if currentJob and currentJob.Value == "JerkChef" then
+                return true
+            end
+        end
+        return false
+    end
+
+    -- ─── FIND AVAILABLE OVEN ───────────────────────────────────
+    -- skipSet: tabla opcional { [def] = true } para saltar hornos que ya fallaron
+    local function BF_FIND_OVEN(skipSet)
+        for _, def in ipairs(BF_OVEN_DEFS) do
+            if skipSet and skipSet[def] then continue end
+            local ok, prompt = pcall(def.getPrompt)
+            if ok and prompt and prompt.Enabled then
+                return def
+            end
+        end
+        -- Si todos están ocupados (raros casos), esperar y reintentar una vez ignorando skip
+        task.wait(2)
+        for _, def in ipairs(BF_OVEN_DEFS) do
+            if skipSet and skipSet[def] then continue end
+            local ok, prompt = pcall(def.getPrompt)
+            if ok and prompt and prompt.Enabled then
+                return def
+            end
+        end
+        return nil
+    end
+
+    -- ─── VENDER COOKED PATTY ───────────────────────────────────
+    local function BF_SELL_COOKED_PATTY()
+        if not BF_HAS("Cooked Patty") then return true end
+        BF_EQUIP("Cooked Patty")
+        task.wait(0.4)
+        local cookedPatty = BF_GET_ITEM("Cooked Patty")
+        if cookedPatty and cookedPatty:FindFirstChild("Handle") then
+            local handlePrompt = cookedPatty.Handle:FindFirstChild("ProximityPrompt")
+            if handlePrompt then
+                BF_FIRE(handlePrompt)
+                task.wait(1)
+                return true
+            end
+        end
+        warn("[BF] Could not sell Cooked Patty.")
+        return false
+    end
+
+    local BF_FIRST_CYCLE = true
+
+    -- ─── SINGLE PATTY CYCLE ────────────────────────────────────
+    local function BF_DO_CYCLE()
+
+        -- 0. Si hay Cooked Patty del ciclo anterior, venderla primero
+        BF_SELL_COOKED_PATTY()
+
+        -- 1. Si hay una patty en proceso en el horno, esperar
+        BF_WAIT_IF_BUSY()
+
+        -- 2. TP al area del trabajo (solo si no esta ya en el trabajo)
+        if BF_FIRST_CYCLE then
+            BF_FIRST_CYCLE = false
+            if not BF_IS_ON_JOB() then
+                BYPASS_TP(POS_START)
+                task.wait(0.5)
+            else
+            end
+        end
+
+        -- 3. Start job if not already on it
+        if not BF_IS_ON_JOB() then
+            RS.Remotes.JobAction:FireServer("StartJob", "JerkChef")
+            task.wait(1)
+        else
+        end
+
+        -- 4. TP a la nevera (SHORT desde aqui en adelante)
+        SHORT_TP(POS_FRIDGE)
+        task.wait(0.4)
+
+        -- 5. Fire fridge ProximityPrompt to get Patty
+        local fridgePrompt = workspace.Jobs.Jerk_Center.ingredientsProx.ProximityPrompt
+        BF_FIRE(fridgePrompt)
+        task.wait(1)
+
+        -- 6. Verify we have Patty
+        if not BF_HAS("Patty") then
+            warn("[BF] Did not get Patty from fridge. Aborting cycle.")
+            return false
+        end
+
+        -- 7-12. Buscar horno, colocar patty y encender — con cambio automatico de horno si falla
+        local ovenDef = nil
+        local cycleOk = false
+        local ovenAttempts = 0
+        local ovenSkip = {}  -- hornos a saltar por "Stove in use"
+
+        repeat
+            ovenAttempts += 1
+
+            -- Buscar horno disponible (saltando los que devolvieron "Stove in use")
+            ovenDef = BF_FIND_OVEN(ovenSkip)
+            if not ovenDef then
+                warn("[BF] No ovens available. Waiting 3s...")
+                task.wait(3)
+            else
+
+                -- TP al horno
+                SHORT_TP(ovenDef.pos)
+                task.wait(0.8)
+
+                -- Equip Patty
+                if not BF_HAS("Patty") then
+                    warn("[BF] Patty ya no esta en inventario. Abortando ciclo.")
+                    return false
+                end
+                BF_EQUIP("Patty")
+
+                -- Esperar a que el prompt este enabled (max 2s)
+                local waitP = 0
+                local pReady = nil
+                repeat
+                    task.wait(0.1)
+                    waitP += 0.1
+                    local ok, p = pcall(ovenDef.getPrompt)
+                    if ok and p and p.Enabled then pReady = p end
+                until pReady or waitP >= 2
+
+                if not pReady then
+                    warn("[BF] Prompt no disponible en este horno, cambiando...")
+                    -- Marcar este horno como no disponible temporalmente saltandolo
+                    -- Al llamar BF_FIND_OVEN de nuevo lo saltara porque su prompt esta disabled
+                else
+                    -- Colocar patty
+                    BF_NOTIFY_MSG = ""
+                    BF_STOVE_BUSY = false
+                    BF_HOLD(pReady)
+                    task.wait(0.3)
+
+                    -- Verificar: "Stove in use" detectado inmediatamente = saltar al siguiente
+                    if BF_STOVE_BUSY then
+                        warn("[BF] Stove en uso, marcando horno y buscando el siguiente...")
+                        BF_STOVE_BUSY = false
+                        ovenSkip[ovenDef] = true  -- no volver a este horno en este ciclo
+                        local hum = LPLR.Character and LPLR.Character:FindFirstChildOfClass("Humanoid")
+                        if hum then hum:UnequipTools() end
+                        task.wait(0.2)
+                        -- TP inmediato al siguiente horno disponible
+                        local nextOven = BF_FIND_OVEN(ovenSkip)
+                        if nextOven then
+                            SHORT_TP(nextOven.pos)
+                            task.wait(0.5)
+                        end
+                    else
+                        -- Verificar con notify normal
+                        local placed = BF_WAIT_NOTIFY("Patty has been placed", 5)
+                        if not placed then
+                            warn("[BF] Horno " .. ovenAttempts .. " no confirmo placement, cambiando de horno...")
+                            -- Desequipar para poder reintentar en otro horno
+                            local hum = LPLR.Character and LPLR.Character:FindFirstChildOfClass("Humanoid")
+                            if hum then hum:UnequipTools() end
+                            task.wait(0.3)
+                        else
+                            task.wait(1)
+
+                            -- Encender fuego
+                            local ok2, p2 = pcall(ovenDef.getPrompt)
+                            if ok2 and p2 and p2.Enabled then
+                                BF_HOLD(p2)
+                                task.wait(0.3)
+                                cycleOk = true
+                            else
+                                warn("[BF] Prompt de encendido no disponible.")
+                            end
+                        end
+                    end
+                end
+            end
+        until cycleOk or ovenAttempts >= 3
+
+        if not cycleOk then
+            warn("[BF] Could not complete placement after " .. ovenAttempts .. " attempts.")
+            return false
+        end
+
+        -- 13. Marcar horno ocupado y esperar coccion
+        BF_OVEN_BUSY = true
+        BF_NOTIFY_MSG = ""
+        BF_RESTORE_CAM()
+
+        local cooked = BF_WAIT_NOTIFY("Patty has finished frying", 90)
+        if not cooked then
+            warn("[BF] Timeout waiting for cooking. Aborting.")
+            BF_OVEN_BUSY = false
+            return false
+        end
+        task.wait(0.5)
+
+        -- 14. TP al horno y recoger — UN SOLO HOLD, sin retry para no romper el trabajo
+        SHORT_TP(ovenDef.pos)
+        task.wait(0.3)
+
+        BF_NOTIFY_MSG = ""
+        local ok3, p3 = pcall(ovenDef.getPrompt)
+        if ok3 and p3 and p3.Enabled then
+            BF_HOLD(p3)
+            task.wait(0.8)
+        else
+            warn("[BF] Prompt del horno no disponible para recoger.")
+            return false
+        end
+
+        -- 15. Verificar Cooked Patty
+        if not BF_HAS("Cooked Patty") then
+            warn("[BF] Cooked Patty no encontrada en inventario.")
+            return false
+        end
+        BF_OVEN_BUSY = false
+
+        -- 16. Vender Cooked Patty
+        BF_SELL_COOKED_PATTY()
+
+        BF_RESTORE_CAM()
+        return true
+    end
+
+    -- ─── MAIN LOOP ─────────────────────────────────────────────
+    function BF.START()
+        if BF.RUNNING then
+            return
+        end
+        BF.RUNNING = true
+        BF_LISTEN_NOTIFY()
+
+        BF._THREAD = task.spawn(function()
+            while BF.RUNNING do
+                local ok = pcall(BF_DO_CYCLE)
+                if not ok then
+                    warn("[BF] Cycle error, retrying in 3s...")
+                    task.wait(3)
+                else
+                    task.wait(0.5)
+                end
+            end
+        end)
+    end
+
+    function BF.STOP()
+        BF.RUNNING = false
+        BF_FIRST_CYCLE = true
+        -- Cancelar el thread inmediatamente (no esperar al ciclo actual)
+        if BF._THREAD then
+            pcall(task.cancel, BF._THREAD)
+            BF._THREAD = nil
+        end
+        BF_RESTORE_CAM()
+    end
+
+    -- expose to UI card
+    _G.BF_START = BF.START
+    _G.BF_STOP  = BF.STOP
+end)()
 
 -- ── UI CARD ──────────────────────────────────────────────
 do
@@ -5469,7 +6894,7 @@ do
     end
 
     -- Burger Farm toggle — wired to logic
-    MK_JOB_TOG("Burger Farm", 2, BF_START, BF_STOP)
+    MK_JOB_TOG("Burger Farm", 2, _G.BF_START, _G.BF_STOP)
 
     -- Candy Farm / Mop Farm — placeholders for future logic
     MK_JOB_TOG("Box Farm",  3, WH_START, WH_STOP)
@@ -5485,8 +6910,8 @@ local function SETUP_MOVEMENT()
     local BYPASS_RATE = 1.5
 
     -- ── State ────────────────────────────────────────────────
-    FLY_ON = false;  local FLY_SPEED  = 25
-    SPD_ON = false;  local SPD_SPEED  = 27
+    _G.EXE.FLY_ON = false;  local FLY_SPEED  = 25
+    _G.EXE.SPD_ON = false;  local SPD_SPEED  = 27
 
     local _bv, _bg
     local _fly_pill, _fly_knob
@@ -5536,14 +6961,14 @@ local function SETUP_MOVEMENT()
         end)
     end
     local function SET_FLY(ON)
-        FLY_ON = ON
+        _G.EXE.FLY_ON = ON
         SET_PILL(_fly_pill, _fly_knob, ON)
         if ON then startFly() else stopFly() end
     end
 
     -- ── SpeedHack ────────────────────────────────────────────
     local function SET_SPD(ON)
-        SPD_ON = ON
+        _G.EXE.SPD_ON = ON
         SET_PILL(_spd_pill, _spd_knob, ON)
         if not ON then
             local c = LPLR.Character
@@ -5561,8 +6986,8 @@ local function SETUP_MOVEMENT()
         local hum = char:FindFirstChildOfClass("Humanoid")
         if not hum then return end
         hum.Died:Connect(function()
-            if FLY_ON then SET_FLY(false) end
-            if SPD_ON then SET_SPD(false) end
+            if _G.EXE.FLY_ON then SET_FLY(false) end
+            if _G.EXE.SPD_ON then SET_SPD(false) end
         end)
     end
     hookDeath(LPLR.Character)
@@ -5570,12 +6995,12 @@ local function SETUP_MOVEMENT()
         hookDeath(char)
         -- Re-enable active features after respawn
         task.wait(0.5)
-        if FLY_ON then startFly() end
+        if _G.EXE.FLY_ON then startFly() end
     end)
 
     -- ── Fly heartbeat ────────────────────────────────────────
     RS_SVC.Heartbeat:Connect(function()
-        if not FLY_ON then return end
+        if not _G.EXE.FLY_ON then return end
         local c = LPLR.Character; if not c then return end
         local hrp = c:FindFirstChild("HumanoidRootPart")
         local cam = workspace.CurrentCamera
@@ -5595,15 +7020,15 @@ local function SETUP_MOVEMENT()
     task.spawn(function()
         while true do
             task.wait(BYPASS_RATE)
-            local anyOn = FLY_ON or SPD_ON
+            local anyOn = _G.EXE.FLY_ON or _G.EXE.SPD_ON
             if anyOn then
                 local c = LPLR.Character
                 if c then
                     local h = c:FindFirstChild("Humanoid")
                     if h then
-                        if FLY_ON then h.PlatformStand = true end
-                        if SPD_ON then h.WalkSpeed = 27 end
-                        if FLY_ON and not c:FindFirstChild("HumanoidRootPart"):FindFirstChildOfClass("BodyVelocity") then
+                        if _G.EXE.FLY_ON then h.PlatformStand = true end
+                        if _G.EXE.SPD_ON then h.WalkSpeed = 27 end
+                        if _G.EXE.FLY_ON and not c:FindFirstChild("HumanoidRootPart"):FindFirstChildOfClass("BodyVelocity") then
                             startFly()
                         end
                     end
@@ -5613,7 +7038,7 @@ local function SETUP_MOVEMENT()
     end)
 
     -- ── CAR FLY ────────────────────────────────────────────
-    local CF_ON = false
+    _G.EXE.CF_ON = false
     local _cf_bv, _cf_bg, _cf_conn
     local _cf_pill, _cf_knob
     local CF_SPEED = 80
@@ -5659,7 +7084,7 @@ local function SETUP_MOVEMENT()
         _cf_conn = RS_SVC.Heartbeat:Connect(function()
             local v2 = CF_GET_VEH()
             if not v2 or not _cf_bv or not _cf_bv.Parent then
-                CF_ON = false
+                _G.EXE.CF_ON = false
                 SET_PILL(_cf_pill, _cf_knob, false)
                 stopCarFly() return
             end
@@ -5796,22 +7221,44 @@ local function SETUP_MOVEMENT()
             local KB_BOX = Instance.new("TextButton", TOG_ROW)
             KB_BOX.Size = UDim2.new(0, 36, 0, 22)
             KB_BOX.Position = UDim2.new(1, -88, 0.5, -11)
-            KB_BOX.BackgroundColor3 = Color3.fromRGB(30, 30, 42)
+            KB_BOX.BackgroundColor3 = CFG.COL.BG
+            KB_BOX.BackgroundTransparency = 0.82
             KB_BOX.BorderSizePixel = 0
             KB_BOX.Text = "—"
             KB_BOX.TextColor3 = CFG.COL.GRY
             KB_BOX.Font = Enum.Font.GothamBold
             KB_BOX.TextSize = 10
             KB_BOX.ZIndex = 6
-            RND(KB_BOX, 5)
-            STR(KB_BOX, CFG.COL.GRY, 1).Transparency = 0.6
+            KB_BOX.AutoButtonColor = false
+            RND(KB_BOX, 8)
+            
+            local KB_STR = STR(KB_BOX, CFG.COL.ACC, 1.2)
+            KB_STR.Transparency = 0.8
+            KB_STR.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+            local KB_GRAD = Instance.new("UIGradient", KB_BOX)
+            KB_GRAD.Color = ColorSequence.new({
+                ColorSequenceKeypoint.new(0, Color3.new(1,1,1)),
+                ColorSequenceKeypoint.new(1, Color3.new(0.8,0.8,0.8))
+            })
+            KB_GRAD.Rotation = 45
+            KB_GRAD.Transparency = NumberSequence.new(0.5)
+
+            KB_BOX.MouseEnter:Connect(function()
+                TWN(KB_BOX, {BackgroundTransparency = 0.65, BackgroundColor3 = CFG.COL.ACC, TextColor3 = Color3.new(0,0,0)}, 0.2)
+                TWN(KB_STR, {Transparency = 0.45}, 0.2)
+            end)
+            KB_BOX.MouseLeave:Connect(function()
+                TWN(KB_BOX, {BackgroundTransparency = 0.82, BackgroundColor3 = CFG.COL.BG, TextColor3 = CFG.COL.GRY}, 0.2)
+                TWN(KB_STR, {Transparency = 0.8}, 0.2)
+            end)
 
             KB_BOX.MouseButton1Click:Connect(function()
                 if KB_LISTENING then return end
                 KB_LISTENING = true
                 KB_BOX.Text = "..."
                 KB_BOX.TextColor3 = CFG.COL.YEL
-                TWN(KB_BOX, {BackgroundColor3 = Color3.fromRGB(50, 45, 20)}, 0.1)
+                TWN(KB_BOX, {BackgroundColor3 = Color3.fromRGB(50, 45, 20), BackgroundTransparency = 0.5, TextSize = 8}, 0.1)
 
                 local conn
                 conn = game:GetService("UserInputService").InputBegan:Connect(function(inp, gpe)
@@ -5825,7 +7272,7 @@ local function SETUP_MOVEMENT()
                         KB_BOUND = nil
                         KB_BOX.Text = "—"
                         KB_BOX.TextColor3 = CFG.COL.GRY
-                        TWN(KB_BOX, {BackgroundColor3 = Color3.fromRGB(30, 30, 42)}, 0.1)
+                        TWN(KB_BOX, {BackgroundColor3 = CFG.COL.BG, BackgroundTransparency = 0.82, TextSize = 10}, 0.1)
                         return
                     end
 
@@ -5835,7 +7282,7 @@ local function SETUP_MOVEMENT()
                     if #name > 4 then name = name:sub(1,4) end
                     KB_BOX.Text = name
                     KB_BOX.TextColor3 = CFG.COL.TXT
-                    TWN(KB_BOX, {BackgroundColor3 = Color3.fromRGB(30, 30, 42)}, 0.1)
+                    TWN(KB_BOX, {BackgroundColor3 = CFG.COL.BG, BackgroundTransparency = 0.82, TextSize = 10}, 0.1)
                 end)
             end)
 
@@ -5881,9 +7328,13 @@ local function SETUP_MOVEMENT()
             local TRACK = Instance.new("Frame", SLD_WRAP)
             TRACK.Size = UDim2.new(1, -48, 0, 6)
             TRACK.Position = UDim2.new(0, 0, 0.5, -3)
-            TRACK.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+            TRACK.BackgroundColor3 = CFG.COL.BG
+            TRACK.BackgroundTransparency = 0.5
             TRACK.BorderSizePixel = 0
             RND(TRACK, 3)
+            local TR_STR = STR(TRACK, CFG.COL.ACC, 1)
+            TR_STR.Transparency = 0.8
+            TR_STR.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 
             local FILL = Instance.new("Frame", TRACK)
             FILL.Size = UDim2.new((initVal - minV) / (maxV - minV), 0, 1, 0)
@@ -5892,13 +7343,14 @@ local function SETUP_MOVEMENT()
             RND(FILL, 3)
 
             local THUMB = Instance.new("TextButton", TRACK)
-            THUMB.Size = UDim2.new(0, 16, 0, 16)
-            THUMB.Position = UDim2.new((initVal - minV) / (maxV - minV), -8, 0.5, -8)
+            THUMB.Size = UDim2.new(0, 14, 0, 14)
+            THUMB.Position = UDim2.new((initVal - minV) / (maxV - minV), -7, 0.5, -7)
             THUMB.BackgroundColor3 = Color3.new(1,1,1)
             THUMB.BorderSizePixel = 0
             THUMB.Text = ""
             THUMB.ZIndex = 6
-            RND(THUMB, 8)
+            RND(THUMB, 10)
+            STR(THUMB, CFG.COL.ACC, 1).Transparency = 0.5
 
             local dragging = false
             THUMB.MouseButton1Down:Connect(function() dragging = true end)
@@ -5925,9 +7377,9 @@ local function SETUP_MOVEMENT()
     -- ── Fly ──────────────────────────────────────────────────
     _fly_pill, _fly_knob = MK_MOV_ROW("Fly", 2,
         function(p, k)
-            FLY_ON = not FLY_ON
-            SET_PILL(p, k, FLY_ON)
-            if FLY_ON then startFly() else stopFly() end
+            _G.EXE.FLY_ON = not _G.EXE.FLY_ON
+            SET_PILL(p, k, _G.EXE.FLY_ON)
+            if _G.EXE.FLY_ON then startFly() else stopFly() end
         end,
         nil, nil, nil, nil
     )
@@ -5935,9 +7387,9 @@ local function SETUP_MOVEMENT()
     -- ── Speed Hack ───────────────────────────────────────────
     _spd_pill, _spd_knob = MK_MOV_ROW("Walk Boost", 3,
         function(p, k)
-            SPD_ON = not SPD_ON
-            SET_PILL(p, k, SPD_ON)
-            if not SPD_ON then
+            _G.EXE.SPD_ON = not _G.EXE.SPD_ON
+            SET_PILL(p, k, _G.EXE.SPD_ON)
+            if not _G.EXE.SPD_ON then
                 local c = LPLR.Character
                 if c then
                     local h = c:FindFirstChild("Humanoid")
@@ -5951,16 +7403,16 @@ local function SETUP_MOVEMENT()
     -- ── Car Fly ───────────────────────────────────────────
     _cf_pill, _cf_knob = MK_MOV_ROW("Car Fly", 4,
         function(p, k)
-            CF_ON = not CF_ON
-            if CF_ON then
+            _G.EXE.CF_ON = not _G.EXE.CF_ON
+            if _G.EXE.CF_ON then
                 local ok = startCarFly()
-                if not ok then CF_ON = false return end
+                if not ok then _G.EXE.CF_ON = false return end
                 SET_PILL(p, k, true)
-                NOTIFY("Car Fly", "Activado! WASD+Space", 2)
+                NOTIFY("Car Fly", "Enabled! WASD+Space", 2)
             else
                 stopCarFly()
                 SET_PILL(p, k, false)
-                NOTIFY("Car Fly", "Desactivado", 2)
+                NOTIFY("Car Fly", "Disabled", 2)
             end
         end,
         CF_SPEED, 0, 1000,
@@ -6053,13 +7505,24 @@ local function SETUP_CAR_MODS()
 
         local FRM = Instance.new("Frame", WRAP)
         FRM.Size = UDim2.new(1, 0, 0, 35)
-        FRM.BackgroundColor3 = Color3.new(0, 0, 0)
-        FRM.BackgroundTransparency = 0.5
+        FRM.BackgroundColor3 = CFG.COL.BG
+        FRM.BackgroundTransparency = 0.82
         FRM.BorderSizePixel = 0
         FRM.ClipsDescendants = true
         FRM.ZIndex = 20 - order
-        RND(FRM, 8)
-        STR(FRM, CFG.COL.GRY, 1)
+        RND(FRM, 10)
+        
+        local DRP_STR = STR(FRM, CFG.COL.ACC, 1.2)
+        DRP_STR.Transparency = 0.8
+        DRP_STR.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+        local DRP_GRAD = Instance.new("UIGradient", FRM)
+        DRP_GRAD.Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, Color3.new(1,1,1)),
+            ColorSequenceKeypoint.new(1, Color3.new(0.8,0.8,0.8))
+        })
+        DRP_GRAD.Rotation = 45
+        DRP_GRAD.Transparency = NumberSequence.new(0.5)
 
         local BTN = Instance.new("TextButton", FRM)
         BTN.Size = UDim2.new(1, 0, 0, 35)
@@ -6067,7 +7530,7 @@ local function SETUP_CAR_MODS()
         BTN.Text = "  " .. label
         BTN.TextColor3 = CFG.COL.TXT
         BTN.Font = Enum.Font.GothamBold
-        BTN.TextSize = 13
+        BTN.TextSize = 14
         BTN.TextXAlignment = Enum.TextXAlignment.Left
         BTN.ZIndex = 21 - order
 
@@ -6282,25 +7745,25 @@ local function SETUP_CAR_DEALER()
 
     -- Header
     local DLR_HDR = Instance.new("Frame", DEALER_CARD)
-    DLR_HDR.Size = UDim2.new(1, 0, 0, 28)
+    DLR_HDR.Size = UDim2.new(1, 0, 0, 35)
     DLR_HDR.BackgroundTransparency = 1
     DLR_HDR.LayoutOrder = 0
 
     local DLR_ICN = Instance.new("ImageLabel", DLR_HDR)
-    DLR_ICN.Size = UDim2.new(0, 24, 0, 24)
-    DLR_ICN.Position = UDim2.new(0, 0, 0.5, -12)
+    DLR_ICN.Size = UDim2.new(0, 32, 0, 32)
+    DLR_ICN.Position = UDim2.new(0, 0, 0.5, -16)
     DLR_ICN.BackgroundTransparency = 1
     DLR_ICN.Image = "rbxassetid://106507089706013"
     DLR_ICN.ImageColor3 = CFG.COL.ACC
 
     local DLR_TTL = Instance.new("TextLabel", DLR_HDR)
-    DLR_TTL.Size = UDim2.new(1, -36, 1, 0)
-    DLR_TTL.Position = UDim2.new(0, 36, 0, 0)
+    DLR_TTL.Size = UDim2.new(1, -40, 1, 0)
+    DLR_TTL.Position = UDim2.new(0, 40, 0, 0)
     DLR_TTL.BackgroundTransparency = 1
     DLR_TTL.Text = "Car Dealer"
     DLR_TTL.TextColor3 = CFG.COL.TXT
     DLR_TTL.Font = Enum.Font.GothamBold
-    DLR_TTL.TextSize = 15
+    DLR_TTL.TextSize = 18
     DLR_TTL.TextXAlignment = Enum.TextXAlignment.Left
 
     local DLR_DIV = Instance.new("Frame", DEALER_CARD)
@@ -6341,13 +7804,24 @@ local function SETUP_CAR_DEALER()
 
         local FRM = Instance.new("Frame", WRAP)
         FRM.Size = UDim2.new(1, 0, 0, 35)
-        FRM.BackgroundColor3 = Color3.new(0, 0, 0)
-        FRM.BackgroundTransparency = 0.5
+        FRM.BackgroundColor3 = CFG.COL.BG
+        FRM.BackgroundTransparency = 0.82
         FRM.BorderSizePixel = 0
         FRM.ClipsDescendants = true
         FRM.ZIndex = 30 - order
-        RND(FRM, 8)
-        STR(FRM, CFG.COL.GRY, 1)
+        RND(FRM, 10)
+        
+        local DLR_STR = STR(FRM, CFG.COL.ACC, 1.2)
+        DLR_STR.Transparency = 0.8
+        DLR_STR.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+        local DLR_GRAD = Instance.new("UIGradient", FRM)
+        DLR_GRAD.Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, Color3.new(1,1,1)),
+            ColorSequenceKeypoint.new(1, Color3.new(0.8,0.8,0.8))
+        })
+        DLR_GRAD.Rotation = 45
+        DLR_GRAD.Transparency = NumberSequence.new(0.5)
 
         local BTN = Instance.new("TextButton", FRM)
         BTN.Size = UDim2.new(1, 0, 0, 35)
@@ -6355,7 +7829,7 @@ local function SETUP_CAR_DEALER()
         BTN.Text = "  " .. label
         BTN.TextColor3 = CFG.COL.TXT
         BTN.Font = Enum.Font.GothamBold
-        BTN.TextSize = 13
+        BTN.TextSize = 14
         BTN.TextXAlignment = Enum.TextXAlignment.Left
         BTN.ZIndex = 31 - order
 
@@ -6431,20 +7905,47 @@ local function SETUP_CAR_DEALER()
 
     local BUY_BTN = Instance.new("TextButton", DEALER_CARD)
     BUY_BTN.Size = UDim2.new(1, 0, 0, 35)
-    BUY_BTN.BackgroundColor3 = CFG.COL.ACC
+    BUY_BTN.BackgroundColor3 = CFG.COL.BG
+    BUY_BTN.BackgroundTransparency = 0.82
     BUY_BTN.BorderSizePixel = 0
     BUY_BTN.Text = "Buy Car"
-    BUY_BTN.TextColor3 = Color3.new(0,0,0)
+    BUY_BTN.TextColor3 = CFG.COL.ACC
     BUY_BTN.Font = Enum.Font.GothamBold
     BUY_BTN.TextSize = 14
     BUY_BTN.LayoutOrder = 3
-    RND(BUY_BTN, 8)
+    BUY_BTN.AutoButtonColor = false
+    RND(BUY_BTN, 10)
+
+    local BUY_STR = STR(BUY_BTN, CFG.COL.ACC, 1.2)
+    BUY_STR.Transparency = 0.8
+    BUY_STR.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+    local BUY_GRAD = Instance.new("UIGradient", BUY_BTN)
+    BUY_GRAD.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.new(1,1,1)),
+        ColorSequenceKeypoint.new(1, Color3.new(0.8,0.8,0.8))
+    })
+    BUY_GRAD.Rotation = 45
+    BUY_GRAD.Transparency = NumberSequence.new(0.5)
+
+    BUY_BTN.MouseEnter:Connect(function()
+        TWN(BUY_BTN, {BackgroundTransparency = 0.65, BackgroundColor3 = CFG.COL.ACC, TextColor3 = Color3.new(0,0,0)}, 0.2)
+        TWN(BUY_STR, {Transparency = 0.5}, 0.2)
+    end)
+    BUY_BTN.MouseLeave:Connect(function()
+        TWN(BUY_BTN, {BackgroundTransparency = 0.82, BackgroundColor3 = CFG.COL.BG, TextColor3 = CFG.COL.ACC}, 0.2)
+        TWN(BUY_STR, {Transparency = 0.8}, 0.2)
+    end)
 
     BUY_BTN.MouseButton1Click:Connect(function()
         if not SEL_CAR then NOTIFY("Dealer", "Select a car first!", 3) return end
         local bank = LPLR.Player_Data.Bank.Value
         if bank < SEL_PRC then NOTIFY("Dealer", "Need $" .. SEL_PRC .. " in Bank", 4) return end
         
+        TWN(BUY_BTN, {BackgroundTransparency = 0.4, TextSize = 13}, 0.1)
+        task.wait(0.1)
+        TWN(BUY_BTN, {BackgroundTransparency = 0.65, TextSize = 14}, 0.1)
+
         local remote = RS_CAR.Remotes:FindFirstChild("Vehicle_Purchase")
         if not remote then NOTIFY("Dealer", "Remote not found!", 3) return end
 
@@ -6522,6 +8023,14 @@ local function SETUP_VISUALS()
     VL.Parent.Size = UDim2.new(1, -10, 1, -10)
     VL.Parent.Position = UDim2.new(0, 5, 0, 5)
     
+    local LL = Instance.new("UIListLayout", VL)
+    LL.Padding = UDim.new(0, 10)
+    LL.SortOrder = Enum.SortOrder.LayoutOrder
+    
+    local RL = Instance.new("UIListLayout", VR)
+    RL.Padding = UDim.new(0, 10)
+    RL.SortOrder = Enum.SortOrder.LayoutOrder
+    
     local function MK_CARD(parent, title, icon)
         local C = Instance.new("Frame", parent)
         C.Size = UDim2.new(1, 0, 0, 0)
@@ -6537,22 +8046,22 @@ local function SETUP_VISUALS()
         PAD.PaddingLeft, PAD.PaddingRight = UDim.new(0, 12), UDim.new(0, 12)
 
         local H = Instance.new("Frame", C)
-        H.Size = UDim2.new(1, 0, 0, 25)
+        H.Size = UDim2.new(1, 0, 0, 35)
         H.BackgroundTransparency = 1
         local HI = Instance.new("ImageLabel", H)
-        HI.Size = UDim2.new(0, 18, 0, 18)
-        HI.Position = UDim2.new(0, 0, 0.5, -9)
+        HI.Size = UDim2.new(0, 24, 0, 24)
+        HI.Position = UDim2.new(0, 0, 0.5, -12)
         HI.BackgroundTransparency = 1
         HI.Image = icon or "rbxassetid://10747373176" 
         HI.ImageColor3 = Color3.fromRGB(50, 150, 255)
         local HT = Instance.new("TextLabel", H)
-        HT.Size = UDim2.new(1, -25, 1, 0)
-        HT.Position = UDim2.new(0, 25, 0, 0)
+        HT.Size = UDim2.new(1, -30, 1, 0)
+        HT.Position = UDim2.new(0, 30, 0, 0)
         HT.BackgroundTransparency = 1
         HT.Text = title
         HT.TextColor3 = Color3.new(1, 1, 1)
         HT.Font = Enum.Font.GothamBold
-        HT.TextSize = 14
+        HT.TextSize = 16
         HT.TextXAlignment = Enum.TextXAlignment.Left
 
         return C
@@ -6578,6 +8087,15 @@ local function SETUP_VISUALS()
         {VAL = ESP_CFG.Chams.Color1, CB = function(c) ESP_CFG.Chams.Color1 = c end},
         {VAL = ESP_CFG.Chams.Color2, CB = function(c) ESP_CFG.Chams.Color2 = c end}
     })
+    ADD_ESP_ROW(C1, "Tool Charms", ESP_CFG.ToolCharms.Enabled, function(v) ESP_CFG.ToolCharms.Enabled = v end, {
+        {VAL = ESP_CFG.ToolCharms.Color1, CB = function(c) ESP_CFG.ToolCharms.Color1 = c end},
+        {VAL = ESP_CFG.ToolCharms.Color2, CB = function(c) ESP_CFG.ToolCharms.Color2 = c end}
+    })
+
+    local C3 = MK_CARD(VR, "Silent Aim", "rbxassetid://10747373176")
+    ADD_TGL_KB(C3, "Enable", false, nil, function(v, k) ESP_CFG.SilentAim.Enabled = v; ESP_CFG.SilentAim.Keybind = k end)
+    ADD_ESP_ROW(C3, "Snapline", ESP_CFG.Snapline.Enabled, function(v) ESP_CFG.Snapline.Enabled = v end, {{VAL = ESP_CFG.Snapline.Color, CB = function(c) ESP_CFG.Snapline.Color = c end}})
+    ADD_SLD(C3, "Snapline Thickness", 1, 5, ESP_CFG.Snapline.Thickness, function(v) ESP_CFG.Snapline.Thickness = v end)
 
     local C2 = MK_CARD(VR, "Player Visual Settings", "rbxassetid://10734950309")
     ADD_ESP_ROW(C2, "Animated Boxes", ESP_CFG.Boxes.Animated, function(v) ESP_CFG.Boxes.Animated = v end)
@@ -6585,9 +8103,14 @@ local function SETUP_VISUALS()
     ADD_ESP_ROW(C2, "Thermal Chams", ESP_CFG.Chams.Thermal, function(v) ESP_CFG.Chams.Thermal = v end)
     
     local F_DRP = ADD_DRP(C2, "Text Font", function(v) 
-        ESP_CFG.Font = Fonts[v] or Enum.Font[v]
+        local f = Fonts[v] or Enum.Font[v]
+        -- Fonts[v] returns a Font object (new system), Enum.Font[v] returns EnumItem
+        -- For .Font property we need EnumItem; for .FontFace we need Font object
+        -- Store both for safe use in UPD_ESP
+        ESP_CFG.Font     = (typeof(f) == "EnumItem") and f or Enum.Font.GothamBold
+        ESP_CFG.FontFace = (typeof(f) == "Font")     and f or nil
     end)
-    F_DRP.REFRESH({"Plex", "GothamBold", "Gotham", "Code", "Roboto", "Arcade", "SciFi"})
+    F_DRP.REFRESH({"GothamBold", "Gotham", "Code", "Roboto", "Arcade", "SciFi"})
     
     ADD_SLD(C2, "Text Size", 8, 24, ESP_CFG.FontSize, function(v) ESP_CFG.FontSize = v end)
     ADD_SLD(C2, "Max Render Distance", 100, 5000, ESP_CFG.MaxDist, function(v) ESP_CFG.MaxDist = v end, "st")
@@ -6604,6 +8127,25 @@ SETUP_VISUALS()
 -- ============================================================
 local function SETUP_CONFIG()
     local CL, CR = ADD_SPLIT(P_SET)
+
+    -- Fix column sizes & add vertical list layouts (same as SETUP_VISUALS)
+    CL.Parent.Size     = UDim2.new(1, -10, 1, -10)
+    CL.Parent.Position = UDim2.new(0, 5, 0, 5)
+    CL.Size = UDim2.new(0.5, -2, 1, 0)
+    CL.AutomaticSize = Enum.AutomaticSize.Y
+
+    local CL_LAY = Instance.new("UIListLayout", CL)
+    CL_LAY.Padding = UDim.new(0, 10)
+    CL_LAY.SortOrder = Enum.SortOrder.LayoutOrder
+    CL_LAY.HorizontalAlignment = Enum.HorizontalAlignment.Center
+
+    CR.Size = UDim2.new(0.5, -2, 1, 0)
+    CR.AutomaticSize = Enum.AutomaticSize.Y
+
+    local CR_LAY = Instance.new("UIListLayout", CR)
+    CR_LAY.Padding = UDim.new(0, 10)
+    CR_LAY.SortOrder = Enum.SortOrder.LayoutOrder
+    CR_LAY.HorizontalAlignment = Enum.HorizontalAlignment.Center
 
     local function MK_CARD(parent, title, icon)
         local C = Instance.new("Frame", parent)
@@ -6622,30 +8164,404 @@ local function SETUP_CONFIG()
         PAD.PaddingLeft, PAD.PaddingRight = UDim.new(0, 12), UDim.new(0, 12)
 
         local H = Instance.new("Frame", C)
-        H.Size = UDim2.new(1, 0, 0, 25)
+        H.Size = UDim2.new(1, 0, 0, 35)
         H.BackgroundTransparency = 1
         
         local HI = Instance.new("ImageLabel", H)
-        HI.Size = UDim2.new(0, 18, 0, 18)
-        HI.Position = UDim2.new(0, 0, 0.5, -9)
+        HI.Size = UDim2.new(0, 24, 0, 24)
+        HI.Position = UDim2.new(0, 0, 0.5, -12)
         HI.BackgroundTransparency = 1
         HI.Image = icon or "rbxassetid://10747373176" 
         HI.ImageColor3 = CFG.COL.ACC
         
         local HT = Instance.new("TextLabel", H)
-        HT.Size = UDim2.new(1, -25, 1, 0)
-        HT.Position = UDim2.new(0, 25, 0, 0)
+        HT.Size = UDim2.new(1, -30, 1, 0)
+        HT.Position = UDim2.new(0, 30, 0, 0)
         HT.BackgroundTransparency = 1
         HT.Text = title
         HT.TextColor3 = Color3.new(1, 1, 1)
         HT.Font = Enum.Font.GothamBold
-        HT.TextSize = 14
+        HT.TextSize = 16
         HT.TextXAlignment = Enum.TextXAlignment.Left
 
         return C
     end
 
-    -- Poner FDBK_CARD en la columna izquierda (CL) en vez de P_SET entero
+    -- ── TELEPORT BYPASS METHODS CARD (Dropdown Style) ──────
+    local TP_CARD_SET = Instance.new("Frame", CR)
+    TP_CARD_SET.Size = UDim2.new(1, 0, 0, 0)
+    TP_CARD_SET.AutomaticSize = Enum.AutomaticSize.Y
+    TP_CARD_SET.BackgroundColor3 = Color3.fromRGB(22, 22, 30)
+    TP_CARD_SET.BackgroundTransparency = 0.2
+    TP_CARD_SET.BorderSizePixel = 0
+    TP_CARD_SET.LayoutOrder = 2
+    RND(TP_CARD_SET, 12)
+    STR(TP_CARD_SET, CFG.COL.ACC, 1).Transparency = 0.75
+
+    local TP_LAY = Instance.new("UIListLayout", TP_CARD_SET)
+    TP_LAY.SortOrder = Enum.SortOrder.LayoutOrder
+    TP_LAY.Padding = UDim.new(0, 10)
+
+    local TP_PAD = Instance.new("UIPadding", TP_CARD_SET)
+    TP_PAD.PaddingTop    = UDim.new(0, 12)
+    TP_PAD.PaddingBottom = UDim.new(0, 14)
+    TP_PAD.PaddingLeft   = UDim.new(0, 12)
+    TP_PAD.PaddingRight  = UDim.new(0, 12)
+
+    -- Header
+    local TP_HDR = Instance.new("Frame", TP_CARD_SET)
+    TP_HDR.Size = UDim2.new(1, 0, 0, 35)
+    TP_HDR.BackgroundTransparency = 1
+    TP_HDR.LayoutOrder = 0
+
+    local TP_ICN = Instance.new("ImageLabel", TP_HDR)
+    TP_ICN.Size = UDim2.new(0, 32, 0, 32)
+    TP_ICN.Position = UDim2.new(0, 0, 0.5, -16)
+    TP_ICN.BackgroundTransparency = 1
+    TP_ICN.Image = "rbxassetid://102084991489439"
+    TP_ICN.ImageColor3 = CFG.COL.ACC
+
+    local TP_TTL = Instance.new("TextLabel", TP_HDR)
+    TP_TTL.Size = UDim2.new(1, -40, 1, 0)
+    TP_TTL.Position = UDim2.new(0, 40, 0, 0)
+    TP_TTL.BackgroundTransparency = 1
+    TP_TTL.Text = "Bypass Method"
+    TP_TTL.TextColor3 = CFG.COL.TXT
+    TP_TTL.Font = Enum.Font.GothamBold
+    TP_TTL.TextSize = 18
+    TP_TTL.TextXAlignment = Enum.TextXAlignment.Left
+
+    local TP_DIV = Instance.new("Frame", TP_CARD_SET)
+    TP_DIV.Size = UDim2.new(1, 0, 0, 1)
+    TP_DIV.BackgroundColor3 = CFG.COL.ACC
+    TP_DIV.BackgroundTransparency = 0.85
+    TP_DIV.BorderSizePixel = 0
+    TP_DIV.LayoutOrder = 1
+
+    -- Dropdown factory for this card
+    local function MK_TP_SET_DRP(label, order)
+        local WRAP = Instance.new("Frame", TP_CARD_SET)
+        WRAP.Size = UDim2.new(1, 0, 0, 35)
+        WRAP.BackgroundTransparency = 1
+        WRAP.BorderSizePixel = 0
+        WRAP.ClipsDescendants = false
+        WRAP.ZIndex = 20 - order
+        WRAP.LayoutOrder = order
+
+        local FRM = Instance.new("Frame", WRAP)
+        FRM.Size = UDim2.new(1, 0, 0, 35)
+        FRM.BackgroundColor3 = CFG.COL.BG
+        FRM.BackgroundTransparency = 0.82
+        FRM.BorderSizePixel = 0
+        FRM.ClipsDescendants = true
+        FRM.ZIndex = 20 - order
+        RND(FRM, 10)
+        
+        local BP_STR = STR(FRM, CFG.COL.ACC, 1.2)
+        BP_STR.Transparency = 0.8
+        BP_STR.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+        local BP_GRAD = Instance.new("UIGradient", FRM)
+        BP_GRAD.Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, Color3.new(1,1,1)),
+            ColorSequenceKeypoint.new(1, Color3.new(0.8,0.8,0.8))
+        })
+        BP_GRAD.Rotation = 45
+        BP_GRAD.Transparency = NumberSequence.new(0.5)
+
+        local BTN = Instance.new("TextButton", FRM)
+        BTN.Size = UDim2.new(1, 0, 0, 35)
+        BTN.BackgroundTransparency = 1
+        BTN.Text = "  " .. label
+        BTN.TextColor3 = CFG.COL.TXT
+        BTN.Font = Enum.Font.GothamBold
+        BTN.TextSize = 14
+        BTN.TextXAlignment = Enum.TextXAlignment.Left
+        BTN.ZIndex = 21 - order
+
+        local ICO = Instance.new("ImageLabel", BTN)
+        ICO.Size = UDim2.new(0, 16, 0, 16)
+        ICO.Position = UDim2.new(1, -24, 0.5, -8)
+        ICO.BackgroundTransparency = 1
+        ICO.Image = "rbxassetid://6031091004"
+        ICO.ImageColor3 = CFG.COL.ACC
+        ICO.ZIndex = 22 - order
+
+        local SCR = Instance.new("ScrollingFrame", FRM)
+        SCR.Position = UDim2.new(0, 0, 0, 35)
+        SCR.BackgroundTransparency = 1
+        SCR.BorderSizePixel = 0
+        SCR.ScrollBarThickness = 2
+        SCR.ScrollBarImageColor3 = CFG.COL.ACC
+        SCR.ZIndex = 22 - order
+        SCR.CanvasSize = UDim2.new(0, 0, 0, 0)
+        SCR.AutomaticCanvasSize = Enum.AutomaticSize.Y
+
+        local LAY = Instance.new("UIListLayout", SCR)
+        LAY.SortOrder = Enum.SortOrder.LayoutOrder
+
+        local IS_OPEN = false
+        local DRP_H = 0
+
+        local function CLOSE()
+            IS_OPEN = false
+            TWN(FRM,  {Size = UDim2.new(1, 0, 0, 35)})
+            TWN(WRAP, {Size = UDim2.new(1, 0, 0, 35)})
+            TWN(ICO,  {Rotation = 0})
+        end
+        local function OPEN(H)
+            if H then DRP_H = H end
+            IS_OPEN = true
+            TWN(FRM,  {Size = UDim2.new(1, 0, 0, 35 + DRP_H)})
+            TWN(WRAP, {Size = UDim2.new(1, 0, 0, 35 + DRP_H)})
+            TWN(ICO,  {Rotation = 180})
+        end
+
+        BTN.MouseButton1Click:Connect(function()
+            if IS_OPEN then CLOSE() else OPEN() end
+        end)
+
+        return { FRM=FRM, WRAP=WRAP, BTN=BTN, SCR=SCR, LAY=LAY, CLOSE=CLOSE, OPEN=OPEN }
+    end
+
+    local METHODS = {
+        { name = "Classic", id = "classic" },
+        { name = "Stepped", id = "stepped" },
+        { name = "Scooter", id = "scooter" }
+    }
+
+    local currentName = "Stepped"
+    for _, m in ipairs(METHODS) do if m.id == TP_METHOD then currentName = m.name end end
+    
+    local D_TP = MK_TP_SET_DRP(currentName, 2)
+    
+    for i, m in ipairs(METHODS) do
+        local ITM = Instance.new("TextButton", D_TP.SCR)
+        ITM.Size = UDim2.new(1, 0, 0, 28)
+        ITM.BackgroundTransparency = 1
+        ITM.Text = "  " .. m.name
+        ITM.TextColor3 = CFG.COL.TXT
+        ITM.Font = Enum.Font.Gotham
+        ITM.TextSize = 12
+        ITM.TextXAlignment = Enum.TextXAlignment.Left
+        ITM.ZIndex = 23
+        ITM.LayoutOrder = i
+        
+        ITM.MouseEnter:Connect(function() TWN(ITM, {TextColor3 = CFG.COL.ACC}, 0.1) end)
+        ITM.MouseLeave:Connect(function() TWN(ITM, {TextColor3 = CFG.COL.TXT}, 0.1) end)
+        
+        ITM.MouseButton1Click:Connect(function()
+            TP_METHOD = m.id
+            D_TP.BTN.Text = "  " .. m.name
+            D_TP.CLOSE()
+            NOTIFY("Bypass", "Method set to: " .. m.name, 3)
+        end)
+    end
+    
+    local h = #METHODS * 28
+    D_TP.SCR.Size = UDim2.new(1, 0, 0, h)
+    D_TP.OPEN(h) D_TP.CLOSE()
+
+    -- ── THEME / TEXT CARD ───────────────────────────────────
+    local TH_CARD = Instance.new("Frame", CR)
+    TH_CARD.Size = UDim2.new(1, 0, 0, 0)
+    TH_CARD.AutomaticSize = Enum.AutomaticSize.Y
+    TH_CARD.BackgroundColor3 = Color3.fromRGB(22, 22, 30)
+    TH_CARD.BackgroundTransparency = 0.2
+    TH_CARD.BorderSizePixel = 0
+    TH_CARD.LayoutOrder = 3
+    RND(TH_CARD, 12)
+    STR(TH_CARD, CFG.COL.ACC, 1).Transparency = 0.75
+
+    local TH_LAY = Instance.new("UIListLayout", TH_CARD)
+    TH_LAY.SortOrder = Enum.SortOrder.LayoutOrder
+    TH_LAY.Padding = UDim.new(0, 10)
+
+    local TH_PAD = Instance.new("UIPadding", TH_CARD)
+    TH_PAD.PaddingTop    = UDim.new(0, 12)
+    TH_PAD.PaddingBottom = UDim.new(0, 14)
+    TH_PAD.PaddingLeft   = UDim.new(0, 12)
+    TH_PAD.PaddingRight  = UDim.new(0, 12)
+
+    -- Header
+    local TH_HDR = Instance.new("Frame", TH_CARD)
+    TH_HDR.Size = UDim2.new(1, 0, 0, 35)
+    TH_HDR.BackgroundTransparency = 1
+    TH_HDR.LayoutOrder = 0
+
+    local TH_ICN = Instance.new("ImageLabel", TH_HDR)
+    TH_ICN.Size = UDim2.new(0, 32, 0, 32)
+    TH_ICN.Position = UDim2.new(0, 0, 0.5, -16)
+    TH_ICN.BackgroundTransparency = 1
+    TH_ICN.Image = "rbxassetid://77077610158107"
+    TH_ICN.ImageColor3 = CFG.COL.ACC
+
+    local TH_TTL = Instance.new("TextLabel", TH_HDR)
+    TH_TTL.Size = UDim2.new(1, -40, 1, 0)
+    TH_TTL.Position = UDim2.new(0, 40, 0, 0)
+    TH_TTL.BackgroundTransparency = 1
+    TH_TTL.Text = "Theme / Text"
+    TH_TTL.TextColor3 = CFG.COL.TXT
+    TH_TTL.Font = Enum.Font.GothamBold
+    TH_TTL.TextSize = 18
+    TH_TTL.TextXAlignment = Enum.TextXAlignment.Left
+
+    local TH_DIV = Instance.new("Frame", TH_CARD)
+    TH_DIV.Size = UDim2.new(1, 0, 0, 1)
+    TH_DIV.BackgroundColor3 = CFG.COL.ACC
+    TH_DIV.BackgroundTransparency = 0.85
+    TH_DIV.BorderSizePixel = 0
+    TH_DIV.LayoutOrder = 1
+
+    -- Dropdown factory reutilizable para esta card
+    local function MK_TH_DRP(label, order)
+        local WRAP = Instance.new("Frame", TH_CARD)
+        WRAP.Size = UDim2.new(1, 0, 0, 35)
+        WRAP.BackgroundTransparency = 1
+        WRAP.BorderSizePixel = 0
+        WRAP.ClipsDescendants = false
+        WRAP.ZIndex = 18 - order
+        WRAP.LayoutOrder = order
+
+        local FRM = Instance.new("Frame", WRAP)
+        FRM.Size = UDim2.new(1, 0, 0, 35)
+        FRM.BackgroundColor3 = CFG.COL.BG
+        FRM.BackgroundTransparency = 0.4
+        FRM.BorderSizePixel = 0
+        FRM.ClipsDescendants = true
+        FRM.ZIndex = 18 - order
+        RND(FRM, 8)
+        STR(FRM, CFG.COL.GRY, 1)
+
+        local BTN = Instance.new("TextButton", FRM)
+        BTN.Size = UDim2.new(1, 0, 0, 35)
+        BTN.BackgroundTransparency = 1
+        BTN.Text = "  " .. label
+        BTN.TextColor3 = CFG.COL.TXT
+        BTN.Font = Enum.Font.GothamBold
+        BTN.TextSize = 14
+        BTN.TextXAlignment = Enum.TextXAlignment.Left
+        BTN.ZIndex = 19 - order
+
+        local ICO = Instance.new("ImageLabel", BTN)
+        ICO.Size = UDim2.new(0, 16, 0, 16)
+        ICO.Position = UDim2.new(1, -24, 0.5, -8)
+        ICO.BackgroundTransparency = 1
+        ICO.Image = "rbxassetid://6031091004"
+        ICO.ImageColor3 = CFG.COL.ACC
+        ICO.ZIndex = 20 - order
+
+        local SCR = Instance.new("ScrollingFrame", FRM)
+        SCR.Position = UDim2.new(0, 0, 0, 35)
+        SCR.BackgroundTransparency = 1
+        SCR.BorderSizePixel = 0
+        SCR.ScrollBarThickness = 2
+        SCR.ScrollBarImageColor3 = CFG.COL.ACC
+        SCR.ZIndex = 20 - order
+        SCR.CanvasSize = UDim2.new(0, 0, 0, 0)
+        SCR.AutomaticCanvasSize = Enum.AutomaticSize.Y
+
+        local LAY = Instance.new("UIListLayout", SCR)
+        LAY.SortOrder = Enum.SortOrder.LayoutOrder
+
+        local IS_OPEN = false
+        local DRP_H = 0
+
+        local function CLOSE()
+            IS_OPEN = false
+            TWN(FRM,  {Size = UDim2.new(1, 0, 0, 35)})
+            TWN(WRAP, {Size = UDim2.new(1, 0, 0, 35)})
+            TWN(ICO,  {Rotation = 0})
+        end
+        local function OPEN(H)
+            if H then DRP_H = H end
+            IS_OPEN = true
+            TWN(FRM,  {Size = UDim2.new(1, 0, 0, 35 + DRP_H)})
+            TWN(WRAP, {Size = UDim2.new(1, 0, 0, 35 + DRP_H)})
+            TWN(ICO,  {Rotation = 180})
+        end
+
+        BTN.MouseButton1Click:Connect(function()
+            if IS_OPEN then CLOSE() else OPEN() end
+        end)
+
+        return { FRM=FRM, WRAP=WRAP, BTN=BTN, ICO=ICO, SCR=SCR, LAY=LAY, CLOSE=CLOSE, OPEN=OPEN }
+    end
+
+    -- ── DROPDOWN 1: UI Theme ─────────────────────────────────
+    local THEME_LIST = {
+        { name = "Default",     icon = "🔴" },
+        { name = "Snow White",  icon = "❄️" },
+        { name = "Sky Blue",    icon = "🌊" },
+        { name = "Void Black",  icon = "🌑" },
+        { name = "Coffee",      icon = "☕" },
+        { name = "Gold",        icon = "✨" },
+    }
+    local D_THEME = MK_TH_DRP("UI Theme", 2)
+    local thH = #THEME_LIST * 30
+    D_THEME.SCR.Size = UDim2.new(1, 0, 0, thH)
+    D_THEME.OPEN(thH) D_THEME.CLOSE()
+
+    for i, t in ipairs(THEME_LIST) do
+        local ITM = Instance.new("TextButton", D_THEME.SCR)
+        ITM.Size = UDim2.new(1, 0, 0, 30)
+        ITM.BackgroundTransparency = 1
+        ITM.Text = "  " .. t.icon .. "  " .. t.name
+        ITM.TextColor3 = CFG.COL.TXT
+        ITM.Font = Enum.Font.Gotham
+        ITM.TextSize = 13
+        ITM.TextXAlignment = Enum.TextXAlignment.Left
+        ITM.ZIndex = 21
+        ITM.LayoutOrder = i
+        ITM.MouseEnter:Connect(function() TWN(ITM, {TextColor3 = CFG.COL.ACC}, 0.1) end)
+        ITM.MouseLeave:Connect(function() TWN(ITM, {TextColor3 = CFG.COL.TXT}, 0.1) end)
+        ITM.MouseButton1Click:Connect(function()
+            D_THEME.BTN.Text = "  " .. t.icon .. "  " .. t.name
+            D_THEME.CLOSE()
+            APPLY_THEME(t.name)
+            NOTIFY("Theme", t.name .. " applied!", 3)
+        end)
+    end
+
+    -- ── DROPDOWN 2: Text Font ────────────────────────────────
+    local FONT_LIST = {
+        { name = "GothamBold", font = Enum.Font.GothamBold },
+        { name = "Gotham",     font = Enum.Font.Gotham },
+        { name = "Code",       font = Enum.Font.Code },
+        { name = "Roboto",     font = Enum.Font.Roboto },
+        { name = "Arcade",     font = Enum.Font.Arcade },
+        { name = "SciFi",      font = Enum.Font.SciFi },
+    }
+    local D_FONT = MK_TH_DRP("Text Font", 3)
+    local fH = #FONT_LIST * 30
+    D_FONT.SCR.Size = UDim2.new(1, 0, 0, fH)
+    D_FONT.OPEN(fH) D_FONT.CLOSE()
+
+    for i, f in ipairs(FONT_LIST) do
+        local ITM = Instance.new("TextButton", D_FONT.SCR)
+        ITM.Size = UDim2.new(1, 0, 0, 30)
+        ITM.BackgroundTransparency = 1
+        ITM.Text = "  " .. f.name
+        ITM.TextColor3 = CFG.COL.TXT
+        ITM.Font = Enum.Font.Gotham
+        ITM.TextSize = 13
+        ITM.TextXAlignment = Enum.TextXAlignment.Left
+        ITM.ZIndex = 21
+        ITM.LayoutOrder = i
+        ITM.MouseEnter:Connect(function() TWN(ITM, {TextColor3 = CFG.COL.ACC}, 0.1) end)
+        ITM.MouseLeave:Connect(function() TWN(ITM, {TextColor3 = CFG.COL.TXT}, 0.1) end)
+        ITM.MouseButton1Click:Connect(function()
+            D_FONT.BTN.Text = "  " .. f.name
+            D_FONT.CLOSE()
+            -- Aplicar fuente al UI completo
+            APPLY_FONT_UI(f.font)
+            -- Actualizar ESP font (usa Enum.Font directamente)
+            ESP_CFG.Font = f.font
+            NOTIFY("Font", f.name .. " applied!", 3)
+        end)
+    end
+
+    -- ── SEND FEEDBACK CARD ──────────────────────────────────
     local FDBK_CARD = MK_CARD(CL, "Send Feedback", "rbxassetid://121092009137441")
     
     ADD_LBL(FDBK_CARD, "Found a bug or have a suggestion?")
@@ -6836,4 +8752,4 @@ if UIS.TouchEnabled then
 end
 
 -- [ DONE ]
-NOTIFY("Central Glass", "UI Loaded! RightCtrl to toggle.", 4)
+NOTIFY("WH01AM", "UI Loaded! RightCtrl to toggle.", 4)
