@@ -134,26 +134,21 @@ local function forceSit(seat)
     end
 end
 
--- Conectar prompt de un VehicleSeat
-local connectedPrompts = {}
-
-local function connectSeat(seat)
-    local prompt = seat:FindFirstChildWhichIsA("ProximityPrompt")
-    if not prompt then return end
-    if connectedPrompts[prompt] then return end
-    connectedPrompts[prompt] = true
-
-    prompt.InputHoldBegan:Connect(function()
+-- Conectar Seated del humanoid actual
+local seatedConn
+local function connectHumanoid(hum)
+    if seatedConn then seatedConn:Disconnect() end
+    seatedConn = hum.Seated:Connect(function(isSeated, seat)
         if not bypassing then return end
+        if not isSeated then return end
+        if not seat then return end
 
-        status.Text = "⏳ Hold iniciado..."
+        -- Verificar que el seat es de un vehiculo
+        local vehicle = seat:FindFirstAncestor("Vehicles")
+        if not vehicle then return end
+
+        status.Text = "🔄 Seated detectado..."
         status.TextColor3 = Color3.fromRGB(255, 200, 50)
-
-        task.wait(prompt.HoldDuration + 0.05)
-
-        if not bypassing then return end
-
-        status.Text = "🔄 Ejecutando bypass..."
         methodLabel.Text = ""
 
         task.spawn(function()
@@ -162,32 +157,17 @@ local function connectSeat(seat)
     end)
 end
 
--- Conectar todos los VehicleSeats existentes
-local function scanVehicles()
-    for _, vehicle in pairs(workspace.Vehicles:GetChildren()) do
-        for _, obj in pairs(vehicle:GetDescendants()) do
-            if obj:IsA("VehicleSeat") then
-                connectSeat(obj)
-            end
-        end
-    end
+-- Conectar al personaje actual
+if lp.Character then
+    local hum = lp.Character:FindFirstChildWhichIsA("Humanoid")
+    if hum then connectHumanoid(hum) end
 end
 
-scanVehicles()
-
--- Conectar carros que spawnen despues
-workspace.Vehicles.ChildAdded:Connect(function(vehicle)
-    task.wait(0.5) -- esperar a que el modelo cargue completo
-    for _, obj in pairs(vehicle:GetDescendants()) do
-        if obj:IsA("VehicleSeat") then
-            connectSeat(obj)
-        end
-    end
-    vehicle.DescendantAdded:Connect(function(obj)
-        if obj:IsA("VehicleSeat") then
-            connectSeat(obj)
-        end
-    end)
+-- Reconectar al hacer respawn
+lp.CharacterAdded:Connect(function(char)
+    char:WaitForChild("Humanoid", 10)
+    local hum = char:FindFirstChildWhichIsA("Humanoid")
+    if hum then connectHumanoid(hum) end
 end)
 
 -- Trigger PC: detectar E cerca de un vehículo
@@ -238,7 +218,6 @@ btn.MouseButton1Click:Connect(function()
         status.Text = "ON - Haz hold al prompt"
         status.TextColor3 = Color3.fromRGB(100, 255, 120)
         methodLabel.Text = ""
-        scanVehicles() -- re-escanear al activar
     else
         btn.Text = "ACTIVAR"
         btn.BackgroundColor3 = Color3.fromRGB(255, 80, 80)
