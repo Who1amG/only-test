@@ -1,7 +1,6 @@
 -- VEHICLE BYPASS ULTRA AGRESIVO
 local Players = game:GetService("Players")
 local lp = Players.LocalPlayer
-local TS = game:GetService("TweenService")
 local UIS = game:GetService("UserInputService")
 
 local bypassing = false
@@ -135,21 +134,26 @@ local function forceSit(seat)
     end
 end
 
--- Conectar prompt individual
-local function connectPrompt(prompt)
-    prompt.Triggered:Connect(function(player)
-        if player ~= lp then return end
+-- Conectar prompt de un VehicleSeat
+local connectedPrompts = {}
+
+local function connectSeat(seat)
+    local prompt = seat:FindFirstChildWhichIsA("ProximityPrompt")
+    if not prompt then return end
+    if connectedPrompts[prompt] then return end
+    connectedPrompts[prompt] = true
+
+    prompt.InputHoldBegan:Connect(function()
         if not bypassing then return end
 
-        local model = prompt:FindFirstAncestorWhichIsA("Model")
-        if not model then return end
-
-        local seat = model:FindFirstChildWhichIsA("VehicleSeat", true)
-                   or model:FindFirstChildWhichIsA("Seat", true)
-        if not seat then return end
-
-        status.Text = "🔄 Prompt detectado..."
+        status.Text = "⏳ Hold iniciado..."
         status.TextColor3 = Color3.fromRGB(255, 200, 50)
+
+        task.wait(prompt.HoldDuration + 0.05)
+
+        if not bypassing then return end
+
+        status.Text = "🔄 Ejecutando bypass..."
         methodLabel.Text = ""
 
         task.spawn(function()
@@ -158,20 +162,30 @@ local function connectPrompt(prompt)
     end)
 end
 
--- Conectar todos los prompts existentes
-for _, vehicle in pairs(workspace.Vehicles:GetChildren()) do
-    for _, obj in pairs(vehicle:GetDescendants()) do
-        if obj:IsA("ProximityPrompt") then
-            connectPrompt(obj)
+-- Conectar todos los VehicleSeats existentes
+local function scanVehicles()
+    for _, vehicle in pairs(workspace.Vehicles:GetChildren()) do
+        for _, obj in pairs(vehicle:GetDescendants()) do
+            if obj:IsA("VehicleSeat") then
+                connectSeat(obj)
+            end
         end
     end
 end
 
--- Conectar prompts de vehiculos que spawnen despues
+scanVehicles()
+
+-- Conectar carros que spawnen despues
 workspace.Vehicles.ChildAdded:Connect(function(vehicle)
+    task.wait(0.5) -- esperar a que el modelo cargue completo
+    for _, obj in pairs(vehicle:GetDescendants()) do
+        if obj:IsA("VehicleSeat") then
+            connectSeat(obj)
+        end
+    end
     vehicle.DescendantAdded:Connect(function(obj)
-        if obj:IsA("ProximityPrompt") then
-            connectPrompt(obj)
+        if obj:IsA("VehicleSeat") then
+            connectSeat(obj)
         end
     end)
 end)
@@ -221,9 +235,10 @@ btn.MouseButton1Click:Connect(function()
         btn.Text = "DESACTIVAR"
         btn.BackgroundColor3 = Color3.fromRGB(80, 200, 100)
         btnStroke.Color = Color3.fromRGB(100, 255, 120)
-        status.Text = "ON - Toca el prompt del carro"
+        status.Text = "ON - Haz hold al prompt"
         status.TextColor3 = Color3.fromRGB(100, 255, 120)
         methodLabel.Text = ""
+        scanVehicles() -- re-escanear al activar
     else
         btn.Text = "ACTIVAR"
         btn.BackgroundColor3 = Color3.fromRGB(255, 80, 80)
@@ -265,4 +280,4 @@ UIS.InputChanged:Connect(function(input)
 end)
 
 print("✅ Vehicle Bypass V2 cargado!")
-print("💡 PC: presiona E | Móvil: toca el prompt del carro")
+print("💡 PC: presiona E | Móvil: haz hold al prompt del carro")
