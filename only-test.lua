@@ -3643,15 +3643,18 @@ local function BUILD_NYH_UI()
                 bg.BackgroundColor3 = Color3.fromRGB(2, 4, 10)
                 bg.BorderSizePixel = 0
 
+                local UIS_L = game:GetService("UserInputService")
+                local IS_MOBILE = UIS_L.TouchEnabled and not UIS_L.KeyboardEnabled
+
                 -- Mobile Compatibility: Add ScrollingFrame if content might overflow
                 local scroll = Instance.new("ScrollingFrame", bg)
                 scroll.Name = "MainScroll"
                 scroll.Size = UDim2.new(1, 0, 1, 0)
                 scroll.BackgroundTransparency = 1
                 scroll.BorderSizePixel = 0
-                scroll.ScrollBarThickness = 3
+                scroll.ScrollBarThickness = IS_MOBILE and 0 or 3
                 scroll.ScrollBarImageColor3 = Color3.fromRGB(0, 120, 255)
-                scroll.CanvasSize = UDim2.new(0, 0, 0, 480)
+                scroll.CanvasSize = UDim2.new(0, 0, 0, IS_MOBILE and 380 or 480)
                 scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
                 scroll.ZIndex = 1
 
@@ -3690,20 +3693,30 @@ local function BUILD_NYH_UI()
 
                 local logo = Instance.new("ImageLabel", scroll)
                 logo.Size = UDim2.new(0, 460, 0, 138)
-                logo.Position = UDim2.new(0.5, -230, 0, 28)
+                logo.Position = IS_MOBILE and UDim2.new(0.5, -230, 0, 15) or UDim2.new(0.5, -230, 0, 28)
                 logo.BackgroundTransparency = 1
                 logo.Image = "rbxassetid://126172848453560"
                 logo.ScaleType = Enum.ScaleType.Fit
                 logo.ImageTransparency = 1
 
+                if IS_MOBILE then
+                    local logoScale = Instance.new("UIScale", logo)
+                    logoScale.Scale = 0.7
+                end
+
                 local card = Instance.new("Frame", scroll)
                 card.Size = UDim2.new(0, 360, 0, 270)
-                card.Position = UDim2.new(0.5, -180, 0, 180)
+                card.Position = IS_MOBILE and UDim2.new(0.5, -180, 0, 120) or UDim2.new(0.5, -180, 0, 180)
                 card.BackgroundColor3 = Color3.fromRGB(6, 10, 20)
                 card.BackgroundTransparency = 1
                 RND(card, 16)
                 local cardStroke = STR(card, Color3.fromRGB(0, 80, 200), 1.2)
                 cardStroke.Transparency = 1
+
+                if IS_MOBILE then
+                    local cardScale = Instance.new("UIScale", card)
+                    cardScale.Scale = 0.8
+                end
 
                 local headerBar = Instance.new("Frame", card)
                 headerBar.Size = UDim2.new(1, 0, 0, 44)
