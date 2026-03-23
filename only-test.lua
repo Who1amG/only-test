@@ -177,16 +177,16 @@ end
 -- ── PROMPT HOLD global (Mobile Compatibility) ─────────────────────────
 local function FORCE_HOLD(prompt)
     if not prompt then return end
-    if fireproximityprompt then
-        pcall(function() fireproximityprompt(prompt) end)
-        return
-    end
-    -- Fallback for executors without fireproximityprompt
-    pcall(function()
+    -- Prioritize engine simulation over fireproximityprompt for anti-cheat/NYC compatibility
+    local success = pcall(function()
         prompt:InputHoldBegin()
-        task.wait(prompt.HoldDuration > 0 and prompt.HoldDuration + 0.15 or 0.25)
+        task.wait(prompt.HoldDuration > 0 and (prompt.HoldDuration + 0.1) or 0.2)
         prompt:InputHoldEnd()
     end)
+    -- Fallback ONLY if simulation fails
+    if not success and fireproximityprompt then
+        pcall(fireproximityprompt, prompt)
+    end
 end
 
 -- [ CFG ]
@@ -2935,7 +2935,7 @@ local function BUILD_NYH_UI()
                     task.wait(0.3)
 
                     -- Buy
-                    fireproximityprompt(gunModel.Info.ProximityPrompt)
+                    FORCE_HOLD(gunModel.Info.ProximityPrompt)
                     task.wait(0.5)
 
                     -- TP back
@@ -3084,7 +3084,7 @@ local function BUILD_NYH_UI()
 
                     -- Fire proximity prompt
                     local prompt = workspace.Shops["3D_Printers"].SwitchPrinter.Prox.ProximityPrompt
-                    fireproximityprompt(prompt)
+                    FORCE_HOLD(prompt)
                     task.wait(0.2)
 
                     -- TP back immediately to a safe waiting spot
@@ -4305,7 +4305,7 @@ local function BUILD_NYH_UI()
                             -- Bypass antes de cada compra para resetear cooldown del servidor
                             BYPASS_TP(crate.obj.Position + Vector3.new(0, 3, 0))
                             task.wait(0.1)
-                            fireproximityprompt(crate.pp)
+                            FORCE_HOLD(crate.pp)
                             task.wait(0.4)
                         end
                     else
@@ -5505,7 +5505,7 @@ local function BUILD_NYH_UI()
                 cam.CameraType = Enum.CameraType.Custom
             end)
         else
-            fireproximityprompt(prompt)
+            FORCE_HOLD(prompt)
         end
     end
 
@@ -6654,7 +6654,7 @@ local function BUILD_NYH_UI()
         if not WH_HAS("Box") then
             WH_TP(Vector3.new(-1183.66, 3.09, 1346.59))
             task.wait(0.3)
-            fireproximityprompt(workspace.Jobs.Warehouse_Box.boxProx.ProximityPrompt)
+            FORCE_HOLD(workspace.Jobs.Warehouse_Box.boxProx.ProximityPrompt)
             local wt = 0
             while wt < 8 do
                 if WH_STOP_CHECK() then return false end
@@ -6920,7 +6920,7 @@ local function BUILD_NYH_UI()
 
         -- Para prompts que aceptan fireproximityprompt normal (fridge, cooked patty handle)
         local function BF_FIRE(prompt)
-            fireproximityprompt(prompt)
+            FORCE_HOLD(prompt)
         end
 
         -- ─── NOTIFY LISTENER ───────────────────────────────────────
