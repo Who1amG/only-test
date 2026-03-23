@@ -174,6 +174,21 @@ local function BYPASS_TP(targetPos)
     end
 end
 
+-- ── PROMPT HOLD global (Mobile Compatibility) ─────────────────────────
+local function FORCE_HOLD(prompt)
+    if not prompt then return end
+    if fireproximityprompt then
+        pcall(function() fireproximityprompt(prompt) end)
+        return
+    end
+    -- Fallback for executors without fireproximityprompt
+    pcall(function()
+        prompt:InputHoldBegin()
+        task.wait(prompt.HoldDuration > 0 and prompt.HoldDuration + 0.15 or 0.25)
+        prompt:InputHoldEnd()
+    end)
+end
+
 -- [ CFG ]
 local Services = setmetatable({}, { __index = function(s, k) return game:GetService(k) end })
 local HttpService = Services.HttpService
@@ -4654,26 +4669,7 @@ local function BUILD_NYH_UI()
             end
         end
 
-        local dur = prompt.HoldDuration
-        if dur and dur > 0 then
-            -- Robust manual hold simulation (precise loop)
-            pcall(function()
-                prompt:InputHoldBegin()
-                local held = 0
-                while held < dur + 0.2 and prompt.Enabled and _G.EXE.FARM_RUNNING do
-                    task.wait(0.05)
-                    held = held + 0.05
-                end
-                prompt:InputHoldEnd()
-            end)
-        else
-            -- Fallback for click-only prompts (should be safe or use fireproximityprompt if absolutely needed)
-            pcall(function()
-                prompt:InputHoldBegin()
-                task.wait(0.1)
-                prompt:InputHoldEnd()
-            end)
-        end
+        FORCE_HOLD(prompt)
     end
 
     local function F_PLANT_WAVE_A(pots)
@@ -5502,12 +5498,7 @@ local function BUILD_NYH_UI()
                 cam.CameraType = Enum.CameraType.Scriptable
                 cam.CFrame = CFrame.new(hrp.Position + Vector3.new(0, 1.5, 0), targetPos)
             end
-            -- Hacer hold
-            pcall(function()
-                prompt:InputHoldBegin()
-                task.wait(dur + 0.3)
-                prompt:InputHoldEnd()
-            end)
+            FORCE_HOLD(prompt)
             -- Restaurar camara
             pcall(function()
                 if char then cam.CameraSubject = char:FindFirstChildOfClass("Humanoid") end
@@ -6129,14 +6120,7 @@ local function BUILD_NYH_UI()
 
         -- ── PROMPT TRIGGER ─────────────────────────────────────
         local function TriggerPrompt(prompt)
-            if not prompt then return end
-            prompt:InputHoldBegin()
-            if prompt.HoldDuration > 0 then
-                task.wait(prompt.HoldDuration + 0.2)
-            else
-                task.wait(0.25)
-            end
-            prompt:InputHoldEnd()
+            FORCE_HOLD(prompt)
         end
 
         local function CF_BUY(T2_PILL, T2_KNOB)
@@ -6625,14 +6609,7 @@ local function BUILD_NYH_UI()
     end
 
     local function TriggerPrompt(prompt)
-        if not prompt then return end
-        prompt:InputHoldBegin()
-        if prompt.HoldDuration > 0 then
-            task.wait(prompt.HoldDuration + 0.2)
-        else
-            task.wait(0.25)
-        end
-        prompt:InputHoldEnd()
+        FORCE_HOLD(prompt)
     end
 
     local function WH_STOP_CHECK() return not _G.EXE.WH_RUNNING end
@@ -6730,16 +6707,7 @@ local function BUILD_NYH_UI()
             TP_CLASSIC(dropPos + Vector3.new(0, 0, 1.5))
             task.wait(0.1)
 
-            -- Attempt the full hold
-            freshPP:InputHoldBegin()
-            local holdTime = math.max(freshPP.HoldDuration, 0)
-            local held = 0
-            while held < holdTime + 0.15 do
-                if not _G.EXE.WH_RUNNING or not WH_HAS("Box") then break end
-                task.wait(0.05)
-                held = held + 0.05
-            end
-            freshPP:InputHoldEnd()
+            FORCE_HOLD(freshPP)
 
             task.wait(0.3)
             deliveryTimer = deliveryTimer + (holdTime + 0.3)
@@ -6939,14 +6907,7 @@ local function BUILD_NYH_UI()
         -- ─── PROMPT INTERACTION ────────────────────────────────────
         -- Usa InputHoldBegin/End (metodo confirmado en Potassium)
         local function BF_HOLD(prompt)
-            local ok, err = pcall(function()
-                prompt:InputHoldBegin()
-                task.wait(prompt.HoldDuration + 0.3)
-                prompt:InputHoldEnd()
-            end)
-            if not ok then
-                warn("[BF] BF_HOLD error: " .. tostring(err))
-            end
+            FORCE_HOLD(prompt)
         end
 
         -- TP corto — sin bypass, solo mueve el CFrame (para distancias cercanas)
@@ -7355,11 +7316,7 @@ local function BUILD_NYH_UI()
         local function MF_CLEAN_DIRT(pp, part)
             if not _G.EXE.MF_RUNNING then return end
             MF_CAM_ZOOM(part)
-            pcall(function()
-                pp:InputHoldBegin()
-                task.wait(2.2)
-                pp:InputHoldEnd()
-            end)
+            FORCE_HOLD(pp)
             MF_CAM_RESET()
             task.wait(5.5)
         end
@@ -7537,11 +7494,7 @@ local function BUILD_NYH_UI()
 
         local function MF_CLEAN_DIRT(pp)
             if not _G.EXE.MF_RUNNING then return end
-            pcall(function()
-                pp:InputHoldBegin()
-                task.wait(2.2)
-                pp:InputHoldEnd()
-            end)
+            FORCE_HOLD(pp)
             task.wait(5.5)
         end
 
@@ -8642,8 +8595,7 @@ local function BUILD_NYH_UI()
             end
             if not on then return end
             _G.DEP_TID = task.spawn(function()
-                local RS_L, TS_L, VIM_L = game:GetService("ReplicatedStorage"), game:GetService("TweenService"),
-                    game:GetService("VirtualInputManager")
+                local RS_L, TS_L = game:GetService("ReplicatedStorage"), game:GetService("TweenService")
                 local ATMAction = RS_L:WaitForChild("Remotes"):WaitForChild("ATMAction")
                 local p_data = LPLR_V:WaitForChild("Player_Data")
                 local bank, wallet = p_data:WaitForChild("Bank"), p_data:WaitForChild("Wallet")
@@ -8703,8 +8655,8 @@ local function BUILD_NYH_UI()
                 TS_L:Create(cam, TweenInfo.new(0.4),
                     { CFrame = CFrame.lookAt(prox.Position + Vector3.new(0, 1, 3), prox.Position) }):Play()
                 task.wait(0.6)
-                VIM_L:SendKeyEvent(true, Enum.KeyCode.E, false, game); task.wait(1.6); VIM_L:SendKeyEvent(false,
-                    Enum.KeyCode.E, false, game); task.wait(0.5)
+                FORCE_HOLD(prox:FindFirstChild("ProximityPrompt") or prox)
+                task.wait(0.5)
 
                 if tonumber(wallet.Value) > 0 then
                     while tonumber(bank.Value) < 5000000 and tonumber(wallet.Value) > 0 do
@@ -8818,7 +8770,6 @@ local function BUILD_NYH_UI()
 
             CLEAR_THREAD = task.spawn(function()
                 local RS_L = game:GetService("ReplicatedStorage")
-                local VIM_L = game:GetService("VirtualInputManager")
                 local S_PT = workspace.spawn_Assets.Points["Trinity Ave. Plaza"]
                 local S_POS = S_PT.Position
 
@@ -8871,14 +8822,7 @@ local function BUILD_NYH_UI()
                 end
 
                 local function useP(pp)
-                    if useFireP then
-                        pcall(function() fireproximityprompt(pp) end)
-                    else
-                        local d = (pp.HoldDuration and pp.HoldDuration > 0) and pp.HoldDuration or 1.0
-                        VIM_L:SendKeyEvent(true, Enum.KeyCode.E, false, game)
-                        task.wait(d + 0.2)
-                        VIM_L:SendKeyEvent(false, Enum.KeyCode.E, false, game)
-                    end
+                    FORCE_HOLD(pp)
                 end
 
                 local initP = nil
