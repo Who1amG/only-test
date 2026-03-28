@@ -1,4 +1,4 @@
---// CFrame Speed (Fly Method Applied) //--
+--// CFrame Speed - FINAL FIX MOBILE REAL //--
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -22,47 +22,50 @@ local inputDir = Vector3.zero
 if not isMobile then
     UserInputService.InputBegan:Connect(function(input, gpe)
         if gpe then return end
-        if input.KeyCode == Enum.KeyCode.W then inputDir += Vector3.new(0, 0, 1) end
-        if input.KeyCode == Enum.KeyCode.S then inputDir += Vector3.new(0, 0, -1) end
+        if input.KeyCode == Enum.KeyCode.W then inputDir += Vector3.new(0, 0, -1) end
+        if input.KeyCode == Enum.KeyCode.S then inputDir += Vector3.new(0, 0, 1) end
         if input.KeyCode == Enum.KeyCode.A then inputDir += Vector3.new(-1, 0, 0) end
         if input.KeyCode == Enum.KeyCode.D then inputDir += Vector3.new(1, 0, 0) end
     end)
 
     UserInputService.InputEnded:Connect(function(input)
-        if input.KeyCode == Enum.KeyCode.W then inputDir -= Vector3.new(0, 0, 1) end
-        if input.KeyCode == Enum.KeyCode.S then inputDir -= Vector3.new(0, 0, -1) end
+        if input.KeyCode == Enum.KeyCode.W then inputDir -= Vector3.new(0, 0, -1) end
+        if input.KeyCode == Enum.KeyCode.S then inputDir -= Vector3.new(0, 0, 1) end
         if input.KeyCode == Enum.KeyCode.A then inputDir -= Vector3.new(-1, 0, 0) end
         if input.KeyCode == Enum.KeyCode.D then inputDir -= Vector3.new(1, 0, 0) end
     end)
 end
 
---// MOVIMIENTO (USANDO MÉTODO DE FLY) //--
+--// MOVIMIENTO //--
 RunService.Heartbeat:Connect(function(dt)
     if not hrp then return end
 
-    local camCF = camera.CFrame
-    local look = camCF.LookVector
-    local right = camCF.RightVector
-
-    -- plano horizontal
-    look = Vector3.new(look.X, 0, look.Z).Unit
-    right = Vector3.new(right.X, 0, right.Z).Unit
-
-    local moveDir = Vector3.zero
+    local moveDir
 
     if isMobile then
-        -- 🔥 MISMO MÉTODO QUE TU FLY
-        local joyDir = humanoid.MoveDirection
+        -- 🔥 FIX REAL
+        local move = humanoid.MoveDirection
         
-        if joyDir.Magnitude > 0 then
-            moveDir = (right * joyDir.X) + (look * joyDir.Z)
+        if move.Magnitude > 0 then
+            moveDir = camera:VectorToWorldSpace(move)
+            moveDir = Vector3.new(moveDir.X, 0, moveDir.Z).Unit
         end
     else
-        moveDir = (right * inputDir.X) + (look * inputDir.Z)
+        local camCF = camera.CFrame
+        local look = camCF.LookVector
+        local right = camCF.RightVector
+
+        look = Vector3.new(look.X, 0, look.Z).Unit
+        right = Vector3.new(right.X, 0, right.Z).Unit
+
+        moveDir = (right * inputDir.X) - (look * inputDir.Z)
+
+        if moveDir.Magnitude > 0 then
+            moveDir = moveDir.Unit
+        end
     end
 
-    if moveDir.Magnitude <= 0 then return end
-    moveDir = moveDir.Unit
+    if not moveDir or moveDir.Magnitude <= 0 then return end
 
     local newPos = hrp.Position + (moveDir * speed * dt)
 
@@ -77,11 +80,11 @@ RunService.Heartbeat:Connect(function(dt)
         newPos = Vector3.new(newPos.X, result.Position.Y + 3, newPos.Z)
     end
 
-    -- rotación hacia movimiento
+    -- rotación
     local rot = CFrame.lookAt(Vector3.zero, moveDir)
     hrp.CFrame = CFrame.new(newPos) * rot
 
-    -- no fricción
+    -- estabilidad
     hrp.AssemblyLinearVelocity = Vector3.new(0, hrp.AssemblyLinearVelocity.Y, 0)
 
     -- noclip
@@ -92,4 +95,4 @@ RunService.Heartbeat:Connect(function(dt)
     end
 end)
 
-print("✅ Speed FIX usando método de Fly (mobile perfecto)")
+print("✅ MOBILE FIX REAL - ahora sí sigue la cámara")
