@@ -1,4 +1,4 @@
---// CFrame WalkSpeed - PC & Móvil (CORREGIDO) //--
+--// CFrame WalkSpeed - PC & Móvil (CONTROLES ARREGLADOS) //--
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -14,9 +14,8 @@ local speed = 100
 --// DETECTAR DISPOSITIVO //--
 local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
 
---// SOLO DESACTIVAR ROTACIÓN AUTO, NO FÍSICA //--
+--// SOLO DESACTIVAR ROTACIÓN AUTO //--
 humanoid.AutoRotate = false
--- NO usar PlatformStand = true (eso causa caída)
 
 --// VARIABLES //--
 local camera = workspace.CurrentCamera
@@ -52,25 +51,32 @@ if isMobile then
     end)
 end
 
---// MOVIMIENTO CFRAME CON GRAVEDAD //--
+--// MOVIMIENTO CFRAME //--
 RunService.Heartbeat:Connect(function(dt)
     if not hrp then return end
     
     local camCF = camera.CFrame
-    local look = Vector3.new(camCF.LookVector.X, 0, camCF.LookVector.Z).Unit
-    local right = Vector3.new(camCF.RightVector.X, 0, camCF.RightVector.Z).Unit
+    
+    -- CORRECCIÓN: Usar CFrame sin invertir Z
+    -- La cámara mira hacia -Z, así que W (que es -Z en input) debe ir hacia donde mira la cámara
+    local look = camCF.LookVector
+    local right = camCF.RightVector
+    
+    -- Aplanar a XZ (sin altura)
+    look = Vector3.new(look.X, 0, look.Z).Unit
+    right = Vector3.new(right.X, 0, right.Z).Unit
     
     -- Convertir input a dirección mundo
-    local worldDir = (right * inputDir.X) + (look * inputDir.Z)
+    -- W = -Z en inputDir, así que restamos look
+    local worldDir = (right * inputDir.X) - (look * inputDir.Z)  -- <-- SIGNO CAMBIADO AQUÍ
     
-    if worldDir.Magnitude > 0 then
+    if worldDir.Magnitude > 0.1 then
         worldDir = worldDir.Unit
         
-        -- MOVER EN X Y Z, PERO MANTENER Y (altura) CON RAYCAST
         local currentPos = hrp.Position
         local newPos = currentPos + (worldDir * speed * dt)
         
-        -- RAYCAST HACIA ABAJO PARA ENCONTRAR SUELO
+        -- Raycast para mantener en suelo
         local rayParams = RaycastParams.new()
         rayParams.FilterDescendantsInstances = {character}
         rayParams.FilterType = Enum.RaycastFilterType.Blacklist
@@ -78,29 +84,27 @@ RunService.Heartbeat:Connect(function(dt)
         local result = workspace:Raycast(newPos + Vector3.new(0, 10, 0), Vector3.new(0, -20, 0), rayParams)
         
         if result then
-            -- Hay suelo, mantener altura sobre él
             newPos = Vector3.new(newPos.X, result.Position.Y + 3, newPos.Z)
         else
-            -- No hay suelo, mantener altura actual
             newPos = Vector3.new(newPos.X, currentPos.Y, newPos.Z)
         end
         
-        -- Aplicar CFrame
+        -- Rotar hacia dirección de movimiento
         local targetRot = CFrame.lookAt(Vector3.zero, worldDir)
         hrp.CFrame = CFrame.new(newPos) * targetRot
         
-        -- Noclip solo para paredes, no para suelo
+        -- Noclip
         for _, part in pairs(character:GetDescendants()) do
             if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
                 part.CanCollide = false
             end
         end
         
-        -- Resetear velocidad para evitar acumulación
         hrp.AssemblyLinearVelocity = Vector3.new(0, hrp.AssemblyLinearVelocity.Y, 0)
     end
 end)
 
-print("✅ CFrame WalkSpeed corregido!")
+print("✅ CFrame WalkSpeed - Controles arreglados!")
 print("Velocidad:", speed)
+print("W = Adelante, S = Atrás, A = Izquierda, D = Derecha")
 print(isMobile and "📱 Modo Móvil" or "⌨️ Modo PC")
