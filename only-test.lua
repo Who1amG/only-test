@@ -1,4 +1,4 @@
---// CFrame WalkSpeed - PC & Móvil (FIX COMPLETO) //--
+--// CFrame WalkSpeed - PC & Mobile (Camera Fixed) //--
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -9,16 +9,12 @@ local character = player.Character or player.CharacterAdded:Wait()
 local hrp = character:WaitForChild("HumanoidRootPart")
 local humanoid = character:WaitForChild("Humanoid")
 
---// CONFIG //--
 local speed = 100
 
---// DETECTAR DISPOSITIVO //--
 local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
 
---// DESACTIVAR ROTACIÓN AUTO //--
 humanoid.AutoRotate = false
 
---// VARS //--
 local camera = workspace.CurrentCamera
 local inputDir = Vector3.zero
 
@@ -44,28 +40,37 @@ end
 if isMobile then
     RunService.Heartbeat:Connect(function()
         local move = humanoid.MoveDirection
+
         if move.Magnitude > 0 then
-            inputDir = Vector3.new(move.X, 0, move.Z).Unit
+            -- convertir a espacio de cámara
+            local camCF = camera.CFrame
+            local look = Vector3.new(camCF.LookVector.X, 0, camCF.LookVector.Z).Unit
+            local right = Vector3.new(camCF.RightVector.X, 0, camCF.RightVector.Z).Unit
+
+            inputDir = (right * move.X + look * move.Z).Unit
         else
             inputDir = Vector3.zero
         end
     end)
 end
 
---// MOVIMIENTO CFRAME //--
+--// MOVIMIENTO //--
 RunService.Heartbeat:Connect(function(dt)
     if not hrp then return end
 
     local camCF = camera.CFrame
+    local look = Vector3.new(camCF.LookVector.X, 0, camCF.LookVector.Z).Unit
+    local right = Vector3.new(camCF.RightVector.X, 0, camCF.RightVector.Z).Unit
 
-    local look = camCF.LookVector
-    local right = camCF.RightVector
+    local worldDir
 
-    look = Vector3.new(look.X, 0, look.Z).Unit
-    right = Vector3.new(right.X, 0, right.Z).Unit
-
-    -- FIX: dirección correcta
-    local worldDir = (right * inputDir.X) + (look * inputDir.Z)
+    if isMobile then
+        -- ya viene convertido
+        worldDir = inputDir
+    else
+        -- PC usa input directo
+        worldDir = (right * inputDir.X) + (look * inputDir.Z)
+    end
 
     if worldDir.Magnitude <= 0 then return end
     worldDir = worldDir.Unit
@@ -73,7 +78,7 @@ RunService.Heartbeat:Connect(function(dt)
     local currentPos = hrp.Position
     local newPos = currentPos + (worldDir * speed * dt)
 
-    -- Raycast suelo
+    -- raycast suelo
     local rayParams = RaycastParams.new()
     rayParams.FilterDescendantsInstances = {character}
     rayParams.FilterType = Enum.RaycastFilterType.Blacklist
@@ -86,21 +91,16 @@ RunService.Heartbeat:Connect(function(dt)
         newPos = Vector3.new(newPos.X, currentPos.Y, newPos.Z)
     end
 
-    -- rotación hacia donde se mueve
     local targetRot = CFrame.lookAt(Vector3.zero, worldDir)
     hrp.CFrame = CFrame.new(newPos) * targetRot
 
-    -- quitar colisiones para evitar trabarse
     for _, part in pairs(character:GetDescendants()) do
         if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
             part.CanCollide = false
         end
     end
 
-    -- eliminar velocidad lateral rara
     hrp.AssemblyLinearVelocity = Vector3.new(0, hrp.AssemblyLinearVelocity.Y, 0)
 end)
 
-print("✅ CFrame WalkSpeed FIXED")
-print("Velocidad:", speed)
-print(isMobile and "📱 Móvil OK (joystick arreglado)" or "⌨️ PC OK")
+print("✅ FIX REAL: ahora sigue la cámara correctamente")
