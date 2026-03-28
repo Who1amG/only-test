@@ -1,4 +1,4 @@
---// CFrame WalkSpeed - PC & Mobile (Camera Fixed) //--
+--// CFrame Speed (Fly Method Applied) //--
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -36,49 +36,37 @@ if not isMobile then
     end)
 end
 
---// MOBILE INPUT (FIX REAL) //--
-if isMobile then
-    RunService.Heartbeat:Connect(function()
-        local move = humanoid.MoveDirection
-
-        if move.Magnitude > 0 then
-            -- convertir a espacio de cámara
-            local camCF = camera.CFrame
-            local look = Vector3.new(camCF.LookVector.X, 0, camCF.LookVector.Z).Unit
-            local right = Vector3.new(camCF.RightVector.X, 0, camCF.RightVector.Z).Unit
-
-            inputDir = (right * move.X + look * move.Z).Unit
-        else
-            inputDir = Vector3.zero
-        end
-    end)
-end
-
---// MOVIMIENTO //--
+--// MOVIMIENTO (USANDO MÉTODO DE FLY) //--
 RunService.Heartbeat:Connect(function(dt)
     if not hrp then return end
 
     local camCF = camera.CFrame
-    local look = Vector3.new(camCF.LookVector.X, 0, camCF.LookVector.Z).Unit
-    local right = Vector3.new(camCF.RightVector.X, 0, camCF.RightVector.Z).Unit
+    local look = camCF.LookVector
+    local right = camCF.RightVector
 
-    local worldDir
+    -- plano horizontal
+    look = Vector3.new(look.X, 0, look.Z).Unit
+    right = Vector3.new(right.X, 0, right.Z).Unit
+
+    local moveDir = Vector3.zero
 
     if isMobile then
-        -- ya viene convertido
-        worldDir = inputDir
+        -- 🔥 MISMO MÉTODO QUE TU FLY
+        local joyDir = humanoid.MoveDirection
+        
+        if joyDir.Magnitude > 0 then
+            moveDir = (right * joyDir.X) + (look * joyDir.Z)
+        end
     else
-        -- PC usa input directo
-        worldDir = (right * inputDir.X) + (look * inputDir.Z)
+        moveDir = (right * inputDir.X) + (look * inputDir.Z)
     end
 
-    if worldDir.Magnitude <= 0 then return end
-    worldDir = worldDir.Unit
+    if moveDir.Magnitude <= 0 then return end
+    moveDir = moveDir.Unit
 
-    local currentPos = hrp.Position
-    local newPos = currentPos + (worldDir * speed * dt)
+    local newPos = hrp.Position + (moveDir * speed * dt)
 
-    -- raycast suelo
+    -- suelo
     local rayParams = RaycastParams.new()
     rayParams.FilterDescendantsInstances = {character}
     rayParams.FilterType = Enum.RaycastFilterType.Blacklist
@@ -87,20 +75,21 @@ RunService.Heartbeat:Connect(function(dt)
 
     if result then
         newPos = Vector3.new(newPos.X, result.Position.Y + 3, newPos.Z)
-    else
-        newPos = Vector3.new(newPos.X, currentPos.Y, newPos.Z)
     end
 
-    local targetRot = CFrame.lookAt(Vector3.zero, worldDir)
-    hrp.CFrame = CFrame.new(newPos) * targetRot
+    -- rotación hacia movimiento
+    local rot = CFrame.lookAt(Vector3.zero, moveDir)
+    hrp.CFrame = CFrame.new(newPos) * rot
 
+    -- no fricción
+    hrp.AssemblyLinearVelocity = Vector3.new(0, hrp.AssemblyLinearVelocity.Y, 0)
+
+    -- noclip
     for _, part in pairs(character:GetDescendants()) do
         if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
             part.CanCollide = false
         end
     end
-
-    hrp.AssemblyLinearVelocity = Vector3.new(0, hrp.AssemblyLinearVelocity.Y, 0)
 end)
 
-print("✅ FIX REAL: ahora sigue la cámara correctamente")
+print("✅ Speed FIX usando método de Fly (mobile perfecto)")
