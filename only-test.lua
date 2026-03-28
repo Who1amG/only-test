@@ -1,4 +1,4 @@
---// CFrame Speed - FINAL FIX MOBILE REAL //--
+--// CFrame WalkSpeed - PC & Mobile (FINAL FIX REAL) //--
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -9,16 +9,19 @@ local character = player.Character or player.CharacterAdded:Wait()
 local hrp = character:WaitForChild("HumanoidRootPart")
 local humanoid = character:WaitForChild("Humanoid")
 
+-- CONFIG
 local speed = 100
 
+-- detectar dispositivo
 local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
 
+-- desactivar rotación automática
 humanoid.AutoRotate = false
 
 local camera = workspace.CurrentCamera
 local inputDir = Vector3.zero
 
---// PC INPUT //--
+-- PC INPUT
 if not isMobile then
     UserInputService.InputBegan:Connect(function(input, gpe)
         if gpe then return end
@@ -36,18 +39,18 @@ if not isMobile then
     end)
 end
 
---// MOVIMIENTO //--
+-- MOVIMIENTO
 RunService.Heartbeat:Connect(function(dt)
     if not hrp then return end
 
     local moveDir
 
     if isMobile then
-        -- 🔥 FIX REAL
+        -- FIX REAL (sin errores)
         local move = humanoid.MoveDirection
-        
+
         if move.Magnitude > 0 then
-            moveDir = camera:VectorToWorldSpace(move)
+            moveDir = camera.CFrame:VectorToWorldSpace(move)
             moveDir = Vector3.new(moveDir.X, 0, moveDir.Z).Unit
         end
     else
@@ -69,7 +72,7 @@ RunService.Heartbeat:Connect(function(dt)
 
     local newPos = hrp.Position + (moveDir * speed * dt)
 
-    -- suelo
+    -- raycast suelo
     local rayParams = RaycastParams.new()
     rayParams.FilterDescendantsInstances = {character}
     rayParams.FilterType = Enum.RaycastFilterType.Blacklist
@@ -80,14 +83,14 @@ RunService.Heartbeat:Connect(function(dt)
         newPos = Vector3.new(newPos.X, result.Position.Y + 3, newPos.Z)
     end
 
-    -- rotación
+    -- rotación hacia movimiento
     local rot = CFrame.lookAt(Vector3.zero, moveDir)
     hrp.CFrame = CFrame.new(newPos) * rot
 
     -- estabilidad
     hrp.AssemblyLinearVelocity = Vector3.new(0, hrp.AssemblyLinearVelocity.Y, 0)
 
-    -- noclip
+    -- noclip suave
     for _, part in pairs(character:GetDescendants()) do
         if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
             part.CanCollide = false
@@ -95,4 +98,5 @@ RunService.Heartbeat:Connect(function(dt)
     end
 end)
 
-print("✅ MOBILE FIX REAL - ahora sí sigue la cámara")
+print("✅ FIX FINAL: móvil ahora sigue la cámara perfecto")
+print(isMobile and "📱 Mobile OK" or "⌨️ PC OK")
