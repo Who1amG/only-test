@@ -1,4 +1,4 @@
---// CFrame WalkSpeed - PC & Móvil (CONTROLES ARREGLADOS) //--
+--// CFrame WalkSpeed - PC & Móvil (JOYSTICK ARREGLADO) //--
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -39,12 +39,13 @@ if not isMobile then
     end)
 end
 
---// MÓVIL: JOYSTICK NATIVO //--
+--// MÓVIL: JOYSTICK NATIVO (ARREGLADO) //--
 if isMobile then
     RunService.Heartbeat:Connect(function()
         local move = humanoid.MoveDirection
         if move.Magnitude > 0 then
-            inputDir = Vector3.new(move.X, 0, move.Z).Unit
+            -- INVERTIR Z para que joystick funcione correctamente
+            inputDir = Vector3.new(move.X, 0, -move.Z).Unit
         else
             inputDir = Vector3.zero
         end
@@ -57,18 +58,13 @@ RunService.Heartbeat:Connect(function(dt)
     
     local camCF = camera.CFrame
     
-    -- CORRECCIÓN: Usar CFrame sin invertir Z
-    -- La cámara mira hacia -Z, así que W (que es -Z en input) debe ir hacia donde mira la cámara
     local look = camCF.LookVector
     local right = camCF.RightVector
     
-    -- Aplanar a XZ (sin altura)
     look = Vector3.new(look.X, 0, look.Z).Unit
     right = Vector3.new(right.X, 0, right.Z).Unit
     
-    -- Convertir input a dirección mundo
-    -- W = -Z en inputDir, así que restamos look
-    local worldDir = (right * inputDir.X) - (look * inputDir.Z)  -- <-- SIGNO CAMBIADO AQUÍ
+    local worldDir = (right * inputDir.X) - (look * inputDir.Z)
     
     if worldDir.Magnitude > 0.1 then
         worldDir = worldDir.Unit
@@ -76,7 +72,6 @@ RunService.Heartbeat:Connect(function(dt)
         local currentPos = hrp.Position
         local newPos = currentPos + (worldDir * speed * dt)
         
-        -- Raycast para mantener en suelo
         local rayParams = RaycastParams.new()
         rayParams.FilterDescendantsInstances = {character}
         rayParams.FilterType = Enum.RaycastFilterType.Blacklist
@@ -89,11 +84,9 @@ RunService.Heartbeat:Connect(function(dt)
             newPos = Vector3.new(newPos.X, currentPos.Y, newPos.Z)
         end
         
-        -- Rotar hacia dirección de movimiento
         local targetRot = CFrame.lookAt(Vector3.zero, worldDir)
         hrp.CFrame = CFrame.new(newPos) * targetRot
         
-        -- Noclip
         for _, part in pairs(character:GetDescendants()) do
             if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
                 part.CanCollide = false
@@ -104,7 +97,6 @@ RunService.Heartbeat:Connect(function(dt)
     end
 end)
 
-print("✅ CFrame WalkSpeed - Controles arreglados!")
+print("✅ CFrame WalkSpeed - Joystick móvil arreglado!")
 print("Velocidad:", speed)
-print("W = Adelante, S = Atrás, A = Izquierda, D = Derecha")
-print(isMobile and "📱 Modo Móvil" or "⌨️ Modo PC")
+print(isMobile and "📱 Modo Móvil activo" or "⌨️ Modo PC activo")
