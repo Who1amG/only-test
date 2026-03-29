@@ -1,4 +1,4 @@
---// CFrame WalkSpeed FINAL FIX REAL (igual que fly feeling) //--
+--// CFrame WalkSpeed FINAL (MOBILE REAL FIX) //--
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -41,27 +41,25 @@ RunService.Heartbeat:Connect(function(dt)
 
     local moveDir
 
-    local camCF = camera.CFrame
-    local look = Vector3.new(camCF.LookVector.X, 0, camCF.LookVector.Z)
-    local right = Vector3.new(camCF.RightVector.X, 0, camCF.RightVector.Z)
-
-    if look.Magnitude > 0 then look = look.Unit end
-    if right.Magnitude > 0 then right = right.Unit end
-
     if isMobile then
         local move = humanoid.MoveDirection
+
         if move.Magnitude > 0 then
-            -- 🔥 MISMO SISTEMA PARA TODO
-            moveDir = (right * move.X) + (look * move.Z)
+            -- 🔥 FIX REAL
+            local camMove = camera.CFrame:VectorToWorldSpace(move)
+            moveDir = Vector3.new(camMove.X, 0, camMove.Z).Unit
         end
     else
+        local camCF = camera.CFrame
+        local look = Vector3.new(camCF.LookVector.X, 0, camCF.LookVector.Z).Unit
+        local right = Vector3.new(camCF.RightVector.X, 0, camCF.RightVector.Z).Unit
+
         if inputDir.Magnitude > 0 then
             moveDir = (right * inputDir.X) + (look * inputDir.Z)
         end
     end
 
     if not moveDir or moveDir.Magnitude <= 0 then return end
-    moveDir = moveDir.Unit
 
     local newPos = hrp.Position + (moveDir * speed * dt)
 
@@ -87,4 +85,4 @@ RunService.Heartbeat:Connect(function(dt)
     end
 end)
 
-print("✅ FINAL FIX: ahora sí sigue la cámara REAL")
+print("✅ AHORA SÍ: móvil sigue cámara perfecto")
