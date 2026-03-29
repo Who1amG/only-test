@@ -1,74 +1,90 @@
---// CFly basado en tu método original (SIN TOOL) //--
+--// CFrame WalkSpeed FINAL FIX REAL (igual que fly feeling) //--
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 
-local plr = Players.LocalPlayer
-local char = plr.Character or plr.CharacterAdded:Wait()
-local root = char:WaitForChild("HumanoidRootPart")
-local humanoid = char:WaitForChild("Humanoid")
-local cam = workspace.CurrentCamera
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local hrp = character:WaitForChild("HumanoidRootPart")
+local humanoid = character:WaitForChild("Humanoid")
 
-local speed = 80
-local flying = false
-local connection
-local pos
+local speed = 100
 
--- activar fly
-local function START_CFLY()
-    if flying then return end
-    flying = true
+local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
 
-    pos = root.Position
-    humanoid.PlatformStand = true
+humanoid.AutoRotate = false
 
-    connection = RunService.Heartbeat:Connect(function()
-        local cf = cam.CFrame.Rotation
+local camera = workspace.CurrentCamera
+local inputDir = Vector3.zero
 
-        -- 🔥 MÉTODO ORIGINAL (EL BUENO)
-        local dir = cf:VectorToObjectSpace(humanoid.MoveDirection * speed)
+-- PC INPUT
+if not isMobile then
+    UserInputService.InputBegan:Connect(function(input, gpe)
+        if gpe then return end
+        if input.KeyCode == Enum.KeyCode.W then inputDir += Vector3.new(0, 0, 1) end
+        if input.KeyCode == Enum.KeyCode.S then inputDir += Vector3.new(0, 0, -1) end
+        if input.KeyCode == Enum.KeyCode.A then inputDir += Vector3.new(-1, 0, 0) end
+        if input.KeyCode == Enum.KeyCode.D then inputDir += Vector3.new(1, 0, 0) end
+    end)
 
-        local direction
-        if dir.Magnitude == 0 then
-            direction = Vector3.zero
-        else
-            direction = cf:VectorToWorldSpace(
-                Vector3.new(dir.X, 0, dir.Z).Unit * dir.Magnitude
-            )
-        end
-
-        pos = pos + direction
-
-        root.CFrame = CFrame.new(
-            pos,
-            cam.CFrame.Position + (pos - cam.CFrame.Position) * 2
-        )
-
-        -- eliminar física
-        root.AssemblyLinearVelocity = Vector3.zero
-        root.AssemblyAngularVelocity = Vector3.zero
-
-        -- noclip
-        for _, v in pairs(char:GetDescendants()) do
-            if v:IsA("BasePart") then
-                v.CanCollide = false
-            end
-        end
+    UserInputService.InputEnded:Connect(function(input)
+        if input.KeyCode == Enum.KeyCode.W then inputDir -= Vector3.new(0, 0, 1) end
+        if input.KeyCode == Enum.KeyCode.S then inputDir -= Vector3.new(0, 0, -1) end
+        if input.KeyCode == Enum.KeyCode.A then inputDir -= Vector3.new(-1, 0, 0) end
+        if input.KeyCode == Enum.KeyCode.D then inputDir -= Vector3.new(1, 0, 0) end
     end)
 end
 
--- desactivar fly
-local function STOP_CFLY()
-    flying = false
-    humanoid.PlatformStand = false
+RunService.Heartbeat:Connect(function(dt)
+    if not hrp then return end
 
-    if connection then
-        connection:Disconnect()
-        connection = nil
+    local moveDir
+
+    local camCF = camera.CFrame
+    local look = Vector3.new(camCF.LookVector.X, 0, camCF.LookVector.Z)
+    local right = Vector3.new(camCF.RightVector.X, 0, camCF.RightVector.Z)
+
+    if look.Magnitude > 0 then look = look.Unit end
+    if right.Magnitude > 0 then right = right.Unit end
+
+    if isMobile then
+        local move = humanoid.MoveDirection
+        if move.Magnitude > 0 then
+            -- 🔥 MISMO SISTEMA PARA TODO
+            moveDir = (right * move.X) + (look * move.Z)
+        end
+    else
+        if inputDir.Magnitude > 0 then
+            moveDir = (right * inputDir.X) + (look * inputDir.Z)
+        end
     end
-end
 
--- AUTO START (puedes cambiarlo si quieres toggle)
-START_CFLY()
+    if not moveDir or moveDir.Magnitude <= 0 then return end
+    moveDir = moveDir.Unit
 
-print("✅ CFly activo (tu método original, FIXED)")
+    local newPos = hrp.Position + (moveDir * speed * dt)
+
+    -- suelo
+    local rayParams = RaycastParams.new()
+    rayParams.FilterDescendantsInstances = {character}
+    rayParams.FilterType = Enum.RaycastFilterType.Blacklist
+
+    local result = workspace:Raycast(newPos + Vector3.new(0, 10, 0), Vector3.new(0, -25, 0), rayParams)
+
+    if result then
+        newPos = Vector3.new(newPos.X, result.Position.Y + 3, newPos.Z)
+    end
+
+    hrp.CFrame = CFrame.new(newPos, newPos + moveDir)
+
+    hrp.AssemblyLinearVelocity = Vector3.new(0, hrp.AssemblyLinearVelocity.Y, 0)
+
+    for _, part in pairs(character:GetDescendants()) do
+        if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+            part.CanCollide = false
+        end
+    end
+end)
+
+print("✅ FINAL FIX: ahora sí sigue la cámara REAL")
