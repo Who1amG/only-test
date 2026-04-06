@@ -1,9 +1,10 @@
--- [ SVC ]
+-- [ SVC ] a
 local ENV = { S = setmetatable({}, { __index = function(_, k) return game:GetService(k) end }) }
 ENV.P, ENV.T, ENV.U, ENV.C, ENV.RS, ENV.RC = ENV.S.Players, ENV.S.TweenService, ENV.S.UserInputService, ENV.S.CoreGui,
     ENV.S.RunService, ENV.S.ReplicatedStorage
 local PLRS, TS, UIS, CORE, RS, RS_CAR = ENV.P, ENV.T, ENV.U, ENV.C, ENV.RS, ENV.RC
 local LPLR = PLRS.LocalPlayer
+local IS_MOBILE = UIS.TouchEnabled and not UIS.KeyboardEnabled
 
 -- [ DETECCIÓN DE EJECUTOR Y COMPATIBILIDAD ]
 local executor = (getexecutorname and getexecutorname()) or (identifyexecutor and identifyexecutor()) or "Unknown"
@@ -2465,7 +2466,10 @@ local function BUILD_NYH_UI()
     end
 
     local B_CLS = MK_BTN(CFG.COL.RED, UDim2.new(0, 15, 0.5, -7))
-    local B_MIN = MK_BTN(CFG.COL.YEL, UDim2.new(0, 35, 0.5, -7))
+    local B_MIN
+    if not IS_MOBILE then
+        B_MIN = MK_BTN(CFG.COL.YEL, UDim2.new(0, 35, 0.5, -7))
+    end
 
     do
         local m = Instance.new("TextLabel", BAR)
@@ -2590,59 +2594,61 @@ local function BUILD_NYH_UI()
     local MIN_DEB = false
     local OLD_SZ  = UDim2.new(0, 0, 0, 0)
 
-    B_MIN.MouseButton1Click:Connect(function()
-        if MIN_DEB then return end
-        MIN_DEB    = true
+    if B_MIN then
+        B_MIN.MouseButton1Click:Connect(function()
+            if MIN_DEB then return end
+            MIN_DEB    = true
 
-        IS_MIN     = not IS_MIN
-        local TCON = MAIN:FindFirstChild("TABS")
-        local PCON = MAIN:FindFirstChild("PGS")
-        local RSZ  = MAIN:FindFirstChild("RSZ_HANDLE")
-        local FOOT = MAIN:FindFirstChild("FOOTER")
+            IS_MIN     = not IS_MIN
+            local TCON = MAIN:FindFirstChild("TABS")
+            local PCON = MAIN:FindFirstChild("PGS")
+            local RSZ  = MAIN:FindFirstChild("RSZ_HANDLE")
+            local FOOT = MAIN:FindFirstChild("FOOTER")
 
-        if IS_MIN then
-            OLD_SZ = MAIN.Size
-            if TCON then TCON.Visible = false end
-            if PCON then PCON.Visible = false end
-            if RSZ then RSZ.Visible = false end
-            if FOOT then FOOT.Visible = false end
+            if IS_MIN then
+                OLD_SZ = MAIN.Size
+                if TCON then TCON.Visible = false end
+                if PCON then PCON.Visible = false end
+                if RSZ then RSZ.Visible = false end
+                if FOOT then FOOT.Visible = false end
 
-            -- Hide Stop Modal if it exists
-            local m = MAIN:FindFirstChild("StopModal")
-            local b = MAIN:FindFirstChild("StopBackdrop")
-            if m then m.Visible = false end
-            if b then b.Visible = false end
+                -- Hide Stop Modal if it exists
+                local m = MAIN:FindFirstChild("StopModal")
+                local b = MAIN:FindFirstChild("StopBackdrop")
+                if m then m.Visible = false end
+                if b then b.Visible = false end
 
-            TWN(MAIN, { Size = UDim2.new(0, 220, 0, 40), BackgroundTransparency = 0.2 })
-            task.wait(0.35)
-            local mTitle = BAR:FindFirstChild("MIN_TITLE")
-            if mTitle then
-                mTitle.TextTransparency = 0
-                mTitle.MaxVisibleGraphemes = 0
-                task.spawn(function()
-                    for i = 1, #mTitle.Text do
-                        if not IS_MIN then break end
-                        mTitle.MaxVisibleGraphemes = i
-                        task.wait(0.04)
-                    end
-                end)
+                TWN(MAIN, { Size = UDim2.new(0, 220, 0, 40), BackgroundTransparency = 0.2 })
+                task.wait(0.35)
+                local mTitle = BAR:FindFirstChild("MIN_TITLE")
+                if mTitle then
+                    mTitle.TextTransparency = 0
+                    mTitle.MaxVisibleGraphemes = 0
+                    task.spawn(function()
+                        for i = 1, #mTitle.Text do
+                            if not IS_MIN then break end
+                            mTitle.MaxVisibleGraphemes = i
+                            task.wait(0.04)
+                        end
+                    end)
+                end
+            else
+                local mTitle = BAR:FindFirstChild("MIN_TITLE")
+                if mTitle then
+                    mTitle.TextTransparency = 1
+                end
+                TWN(MAIN, { Size = OLD_SZ, BackgroundTransparency = 0.1 })
+                task.wait(0.35)
+                if TCON then TCON.Visible = true end
+                if PCON then PCON.Visible = true end
+                if RSZ then RSZ.Visible = true end
+                if FOOT then FOOT.Visible = true end
             end
-        else
-            local mTitle = BAR:FindFirstChild("MIN_TITLE")
-            if mTitle then
-                mTitle.TextTransparency = 1
-            end
-            TWN(MAIN, { Size = OLD_SZ, BackgroundTransparency = 0.1 })
-            task.wait(0.35)
-            if TCON then TCON.Visible = true end
-            if PCON then PCON.Visible = true end
-            if RSZ then RSZ.Visible = true end
-            if FOOT then FOOT.Visible = true end
-        end
 
-        task.wait(0.1)
-        MIN_DEB = false
-    end)
+            task.wait(0.1)
+            MIN_DEB = false
+        end)
+    end
 
     -- [ TAB BAR ]
     local TCON = Instance.new("Frame", MAIN)
