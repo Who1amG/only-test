@@ -661,15 +661,19 @@ local function SETUP_COLOR_PICKER()
     local function HANDLE_INPUT(obj, cb)
         local drag = false
         obj.InputBegan:Connect(function(i)
-            if i.UserInputType == Enum.UserInputType.MouseButton1 then
+            if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
                 drag = true; cb(i)
             end
         end)
         UIS.InputChanged:Connect(function(i)
-            if drag and i.UserInputType == Enum.UserInputType.MouseMovement then cb(i) end
+            if drag and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
+                cb(i)
+            end
         end)
         UIS.InputEnded:Connect(function(i)
-            if i.UserInputType == Enum.UserInputType.MouseButton1 then drag = false end
+            if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+                drag = false
+            end
         end)
     end
 
@@ -1359,20 +1363,24 @@ local function ADD_SLD(PAG, TXT, MIN, MAX, DEF, CB, SFX)
     end
 
     local DRAG = false
-    FRM.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+    local function START_DRAG(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             getgenv()._CEN_SLD_ACTIVE = true -- LOCK GLOBAL DRAG
             DRAG = true
             UPD(input)
         end
-    end)
+    end
+
+    FRM.InputBegan:Connect(START_DRAG)
+
     UIS.InputChanged:Connect(function(input)
-        if DRAG and input.UserInputType == Enum.UserInputType.MouseMovement then
+        if DRAG and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
             UPD(input)
         end
     end)
+
     UIS.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             getgenv()._CEN_SLD_ACTIVE = false -- UNLOCK GLOBAL DRAG
             DRAG = false
         end
