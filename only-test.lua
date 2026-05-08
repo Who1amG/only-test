@@ -181,9 +181,10 @@ local PICKER_MAIN      = nil
 -- State Variables
 local useNotifications = true
 local useWatermark     = false
-local curW             = 900
-local curH             = 530
-local SIDE_W           = 220
+local IS_MOBILE       = UIS.TouchEnabled and not UIS.KeyboardEnabled
+local curW             = IS_MOBILE and 600 or 900
+local curH             = IS_MOBILE and 350 or 530
+local SIDE_W           = IS_MOBILE and 160 or 220
 local GAP              = 8
 
 local SG               = Instance.new("ScreenGui")
@@ -231,8 +232,29 @@ local RightBox = NewFrame(Root,
 Corner(RightBox, 10)
 Stroke(RightBox, STROKE2, 1.2)
 RightBox.ClipsDescendants = true
+
 local rightGrad = Instance.new("UIGradient")
 rightGrad.Rotation = 90
+rightGrad.Parent = RightBox
+
+-- ══════════════════ MOBILE HIDE BUTTON ══════════════════
+if IS_MOBILE then
+    local MobileBtn = Instance.new("ScreenGui", PG)
+    MobileBtn.Name = "MobileToggle"
+    
+    local Toggle = NewBtn(MobileBtn, UDim2.new(0, 80, 0, 32), UDim2.new(0.5, -40, 0, 10), Color3.fromRGB(24, 24, 30))
+    Corner(Toggle, 8)
+    Stroke(Toggle, STROKE2, 1)
+    
+    local Txt = NewLabel(Toggle, "HIDE UI", 11, ACCENT, true, Enum.TextXAlignment.Center)
+    Txt.Size = UDim2.new(1, 0, 1, 0)
+    
+    Toggle.MouseButton1Click:Connect(function()
+        Root.Visible = not Root.Visible
+        Txt.Text = Root.Visible and "HIDE UI" or "SHOW UI"
+    end)
+    MakeDraggable(Toggle) -- Allow moving the toggle button
+end
 
 -- ══════════════════ NOTIFICATION SYSTEM ══════════════════
 local NotifySG = Instance.new("ScreenGui")
