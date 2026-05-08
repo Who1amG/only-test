@@ -128,7 +128,7 @@ local function MakeDraggable(area, target)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             task.wait() -- Small wait to let slider flags set
             if getgenv()._CEN_SLD_ACTIVE or getgenv()._CEN_PKR_ACTIVE then return end
-            
+
             dragging = true
             dragStart = input.Position
             startPos = target.Position
@@ -144,9 +144,9 @@ local function MakeDraggable(area, target)
 
     game:GetService("UserInputService").InputChanged:Connect(function(input)
         if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-            if getgenv()._CEN_SLD_ACTIVE or getgenv()._CEN_PKR_ACTIVE then 
-                dragging = false 
-                return 
+            if getgenv()._CEN_SLD_ACTIVE or getgenv()._CEN_PKR_ACTIVE then
+                dragging = false
+                return
             end
             local delta = input.Position - dragStart
             local ease = useSmoothDrag and 0.15 or 0
@@ -181,7 +181,7 @@ local PICKER_MAIN      = nil
 -- State Variables
 local useNotifications = true
 local useWatermark     = false
-local IS_MOBILE       = UIS.TouchEnabled and not UIS.KeyboardEnabled
+local IS_MOBILE        = UIS.TouchEnabled and not UIS.KeyboardEnabled
 local curW             = IS_MOBILE and 600 or 900
 local curH             = IS_MOBILE and 350 or 530
 local SIDE_W           = IS_MOBILE and 160 or 220
@@ -241,14 +241,14 @@ rightGrad.Parent = RightBox
 if IS_MOBILE then
     local MobileBtn = Instance.new("ScreenGui", PG)
     MobileBtn.Name = "MobileToggle"
-    
+
     local Toggle = NewBtn(MobileBtn, UDim2.new(0, 80, 0, 32), UDim2.new(0.5, -40, 0, 10), Color3.fromRGB(24, 24, 30))
     Corner(Toggle, 8)
     Stroke(Toggle, STROKE2, 1)
-    
+
     local Txt = NewLabel(Toggle, "HIDE UI", 11, ACCENT, true, Enum.TextXAlignment.Center)
     Txt.Size = UDim2.new(1, 0, 1, 0)
-    
+
     Toggle.MouseButton1Click:Connect(function()
         Root.Visible = not Root.Visible
         Txt.Text = Root.Visible and "HIDE UI" or "SHOW UI"
@@ -2228,12 +2228,25 @@ do
     unloadLbl.Size = UDim2.new(1, 0, 1, 0)
 
     unloadBtn.MouseButton1Click:Connect(function()
-        snowActive = false
-        useWatermark = false
-        useNotifications = false
-        SG:Destroy()
-        NotifySG:Destroy()
-        if _G.UnloadScript then _G.UnloadScript() end
+        NOTIFY("System", "Unloading script...", 2)
+        task.wait(0.3)
+        
+        -- Master UNLOAD
+        if _G.ESP_LOOP then _G.ESP_LOOP:Disconnect(); _G.ESP_LOOP = nil end
+        if _G.ESP_CACHE then
+            for _, e in pairs(_G.ESP_CACHE) do
+                pcall(function() e.FRM:Destroy() end)
+                if e.CHAM then pcall(function() e.CHAM:Destroy() end) end
+                if e.TCHAM then pcall(function() e.TCHAM:Destroy() end) end
+            end
+            _G.ESP_CACHE = nil
+        end
+        pcall(function() ESP_HOLDER:Destroy() end)
+        pcall(function() NotifySG:Destroy() end)
+        pcall(function() SG:Destroy() end)
+        if IS_MOBILE and PG:FindFirstChild("MobileToggle") then
+            pcall(function() PG.MobileToggle:Destroy() end)
+        end
     end)
 end
 
