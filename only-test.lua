@@ -792,16 +792,20 @@ for i, data in ipairs(SLIDERS) do
     valLbl.Size = UDim2.new(0.4, 0, 1, 0)
     valLbl.Position = UDim2.new(0.6, 0, 0, 0)
 
-    local track = NewFrame(row, UDim2.new(1, 0, 0, 5), UDim2.new(0, 0, 0, 26), SLBG)
-    Corner(track, 3)
+    local trackH = IS_MOBILE and 30 or 5
+    local track = NewBtn(row, UDim2.new(1, 0, 0, trackH), UDim2.new(0, 0, 0, 26 - (trackH/2 - 2)), PANEL, 1)
+    
+    local trackBG = NewFrame(track, UDim2.new(1, 0, 0, 5), UDim2.new(0, 0, 0.5, -2), SLBG)
+    Corner(trackBG, 3)
 
     local pct = (data.val - data.min) / (data.max - data.min)
-    local fill = NewFrame(track, UDim2.new(pct, 0, 1, 0), UDim2.new(0, 0, 0, 0), SLFILL)
+    local fill = NewFrame(trackBG, UDim2.new(pct, 0, 1, 0), UDim2.new(0, 0, 0, 0), SLFILL)
     Corner(fill, 3)
     accentFills[#accentFills + 1] = fill
 
-    local knob = NewFrame(track, UDim2.new(0, 15, 0, 15), UDim2.new(pct, -7, 0.5, -7), Color3.fromRGB(228, 230, 255))
-    Corner(knob, 8)
+    local knobS = IS_MOBILE and 20 or 15
+    local knob = NewFrame(track, UDim2.new(0, knobS, 0, knobS), UDim2.new(pct, -knobS/2, 0.5, -knobS/2), Color3.fromRGB(228, 230, 255))
+    Corner(knob, knobS/2)
     Stroke(knob, Color3.fromRGB(170, 174, 210), 1.5)
 
     local dragging = false
@@ -813,7 +817,7 @@ for i, data in ipairs(SLIDERS) do
         local nv = math.floor((data.min + rel * (data.max - data.min)) * 10 + 0.5) / 10
         valLbl.Text = string.format("%.1f", nv)
         Tw(fill, 0.04, "Linear", "Out", { Size = UDim2.new(rel, 0, 1, 0) })
-        Tw(knob, 0.04, "Linear", "Out", { Position = UDim2.new(rel, -7, 0.5, -7) })
+        Tw(knob, 0.04, "Linear", "Out", { Position = UDim2.new(rel, -knobS/2, 0.5, -knobS/2) })
     end
 
     track.InputBegan:Connect(function(inp)
@@ -1436,14 +1440,20 @@ do
         valL.Size = UDim2.new(0.4, 0, 1, 0)
         valL.Position = UDim2.new(0.6, 0, 0, 0)
 
-        local track = NewFrame(row, UDim2.new(1, 0, 0, 4), UDim2.new(0, 0, 0, 24), Color3.fromRGB(45, 45, 55))
-        Corner(track, 2)
-        local fill = NewFrame(track, UDim2.new((default - min) / (max - min), 0, 1, 0), nil, ACCENT)
+        local trackH = IS_MOBILE and 32 or 24
+        local track = NewBtn(row, UDim2.new(1, 0, 0, trackH), UDim2.new(0, 0, 0, 20), BG, 1)
+        
+        local trackBG = NewFrame(track, UDim2.new(1, 0, 0, 4), UDim2.new(0, 0, 0.5, -2), Color3.fromRGB(45, 45, 55))
+        Corner(trackBG, 2)
+        
+        local fill = NewFrame(trackBG, UDim2.new((default - min) / (max - min), 0, 1, 0), nil, ACCENT)
         Corner(fill, 2)
         accentFills[#accentFills + 1] = fill
-        local knob = NewFrame(track, UDim2.new(0, 12, 0, 12), UDim2.new((default - min) / (max - min), -6, 0.5, -6),
+        
+        local knobS = IS_MOBILE and 18 or 12
+        local knob = NewFrame(track, UDim2.new(0, knobS, 0, knobS), UDim2.new((default - min) / (max - min), -knobS/2, 0.5, -knobS/2),
             Color3.new(1, 1, 1))
-        Corner(knob, 6)
+        Corner(knob, knobS/2)
 
         local dragging = false
         local function update(inputX)
@@ -1451,7 +1461,7 @@ do
             local val = math.floor(min + rel * (max - min))
             valL.Text = tostring(val) .. (suffix or "")
             fill.Size = UDim2.new(rel, 0, 1, 0)
-            knob.Position = UDim2.new(rel, -6, 0.5, -6)
+            knob.Position = UDim2.new(rel, -knobS/2, 0.5, -knobS/2)
             callback(val)
         end
 
@@ -2074,14 +2084,20 @@ do
         vLbl.Size = UDim2.new(0.4, 0, 1, 0)
         vLbl.Position = UDim2.new(0.6, 0, 0, 0)
 
-        local track = NewBtn(row, UDim2.new(1, 0, 0, 4), UDim2.new(0, 0, 0, 22), SLBG, 0)
-        Corner(track, 2)
-        local fill = NewFrame(track, UDim2.new((default - min) / (max - min), 0, 1, 0), UDim2.new(0, 0, 0, 0), SLFILL)
+        local trackH = IS_MOBILE and 30 or 20
+        local track = NewBtn(row, UDim2.new(1, 0, 0, trackH), UDim2.new(0, 0, 0, 22 - (trackH/2 - 2)), SLBG, 1)
+        
+        local trackBG = NewFrame(track, UDim2.new(1, 0, 0, 4), UDim2.new(0, 0, 0.5, -2), SLBG)
+        Corner(trackBG, 2)
+        
+        local fill = NewFrame(trackBG, UDim2.new((default - min) / (max - min), 0, 1, 0), UDim2.new(0, 0, 0, 0), SLFILL)
         Corner(fill, 2)
         accentFills[#accentFills + 1] = fill
-        local knob = NewFrame(track, UDim2.new(0, 12, 0, 12), UDim2.new((default - min) / (max - min), -6, 0.5, -6),
+        
+        local knobS = IS_MOBILE and 18 or 12
+        local knob = NewFrame(track, UDim2.new(0, knobS, 0, knobS), UDim2.new((default - min) / (max - min), -knobS/2, 0.5, -knobS/2),
             Color3.new(1, 1, 1))
-        Corner(knob, 6)
+        Corner(knob, knobS/2)
 
         local dragging = false
         local function Update(inputX)
@@ -2089,7 +2105,7 @@ do
             local val = math.floor(min + rel * (max - min))
             vLbl.Text = tostring(val)
             fill.Size = UDim2.new(rel, 0, 1, 0)
-            knob.Position = UDim2.new(rel, -6, 0.5, -6)
+            knob.Position = UDim2.new(rel, -knobS/2, 0.5, -knobS/2)
             callback(val)
         end
 
@@ -2230,9 +2246,11 @@ do
     unloadBtn.MouseButton1Click:Connect(function()
         NOTIFY("System", "Unloading script...", 2)
         task.wait(0.3)
-        
+
         -- Master UNLOAD
-        if _G.ESP_LOOP then _G.ESP_LOOP:Disconnect(); _G.ESP_LOOP = nil end
+        if _G.ESP_LOOP then
+            _G.ESP_LOOP:Disconnect(); _G.ESP_LOOP = nil
+        end
         if _G.ESP_CACHE then
             for _, e in pairs(_G.ESP_CACHE) do
                 pcall(function() e.FRM:Destroy() end)
