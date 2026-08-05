@@ -1,4 +1,4 @@
---wsssssssssssssssds
+-- dont touch or edit this script is a backup of my ui
 (function()
     local cg = game:GetService("CoreGui")
     local uis = game:GetService("UserInputService")
@@ -1269,10 +1269,12 @@
 
     local isBinding = false
     local function cBind(pC, t, dTxt, cbk)
+        local isMobile = (uis.TouchEnabled and not uis.KeyboardEnabled) or (uis.TouchEnabled and not uis.MouseEnabled)
         local fr = Instance.new("Frame")
         fr.Size = UDim2.new(1, 0, 0, 22)
         fr.BackgroundTransparency = 1
         fr.ZIndex = 10
+        fr.Visible = not isMobile
         fr.Parent = pC
 
         local lb = Instance.new("TextLabel")
@@ -2036,6 +2038,7 @@
     end
 
     local function cTogBind(pC, t, defState, dTxt, cbk, bindCbk)
+        local isMobile = (uis.TouchEnabled and not uis.KeyboardEnabled) or (uis.TouchEnabled and not uis.MouseEnabled)
         local fr = Instance.new("Frame")
         fr.Size = UDim2.new(1, 0, 0, 22)
         fr.BackgroundTransparency = 1
@@ -2043,7 +2046,7 @@
         fr.Parent = pC
 
         local lb = Instance.new("TextLabel")
-        lb.Size = UDim2.new(1, -120, 1, 0)
+        lb.Size = isMobile and UDim2.new(1, -40, 1, 0) or UDim2.new(1, -120, 1, 0)
         lb.BackgroundTransparency = 1
         lb.Text = t
         lb.TextColor3 = tm.st
@@ -2118,6 +2121,7 @@
         bg.BackgroundColor3 = tm.m
         bg.ClipsDescendants = true
         bg.ZIndex = 10
+        bg.Visible = not isMobile
         bg.Parent = fr
         table.insert(allB, { bg, "m" })
 
