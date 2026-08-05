@@ -1,4 +1,4 @@
--- dont touch or edit this script is a backup of my ui
+--wsssssssssssssssds
 (function()
     local cg = game:GetService("CoreGui")
     local uis = game:GetService("UserInputService")
@@ -413,13 +413,91 @@
     end
     getgenv().YIX_Notify = Notify
 
+    local isMobile = (uis.TouchEnabled and not uis.KeyboardEnabled) or (uis.TouchEnabled and not uis.MouseEnabled)
+
     local mf = Instance.new("Frame")
-    mf.Size = UDim2.new(0, 780, 0, 480)
-    mf.Position = UDim2.new(0.5, -390, 0.5, -240)
+    if isMobile then
+        mf.Size = UDim2.new(0, 550, 0, 340)
+        mf.Position = UDim2.new(0.5, -275, 0.5, -170)
+    else
+        mf.Size = UDim2.new(0, 780, 0, 480)
+        mf.Position = UDim2.new(0.5, -390, 0.5, -240)
+    end
     mf.BackgroundColor3 = tm.m
     mf.BackgroundTransparency = cfg.tOn and ((cfg.tOp or 100) / 100) or 0
     mf.BorderSizePixel = 0
     mf.Parent = sg
+
+    -- Mobile Floating UI Toggle/Hide Button
+    local mbHideBtn = Instance.new("Frame")
+    mbHideBtn.Name = "YIX_MobileHideButton"
+    mbHideBtn.Size = UDim2.new(0, 42, 0, 42)
+    mbHideBtn.Position = UDim2.new(0, 20, 0.5, -21)
+    mbHideBtn.BackgroundColor3 = tm.m
+    mbHideBtn.BackgroundTransparency = cfg.tOn and ((cfg.tOp or 100) / 100) or 0
+    mbHideBtn.ZIndex = 2000
+    mbHideBtn.Visible = isMobile and (cfg.mbHideBtnOn ~= false)
+    mbHideBtn.Parent = sg
+    table.insert(allB, { mbHideBtn, "m" })
+
+    local mbHideCorner = Instance.new("UICorner")
+    mbHideCorner.CornerRadius = UDim.new(0, 8)
+    mbHideCorner.Parent = mbHideBtn
+
+    local mbHideStroke = Instance.new("UIStroke")
+    mbHideStroke.Color = tm.k
+    mbHideStroke.Thickness = 1.5
+    mbHideStroke.Parent = mbHideBtn
+    table.insert(allB, { mbHideStroke, "k" })
+
+    local mbHideImg = Instance.new("ImageLabel")
+    mbHideImg.Size = UDim2.new(0, 24, 0, 24)
+    mbHideImg.Position = UDim2.new(0.5, -12, 0.5, -12)
+    mbHideImg.BackgroundTransparency = 1
+    mbHideImg.Image = "rbxassetid://106698881108844"
+    mbHideImg.ImageColor3 = tm.t
+    mbHideImg.ScaleType = Enum.ScaleType.Fit
+    mbHideImg.ZIndex = 2001
+    mbHideImg.Parent = mbHideBtn
+    table.insert(allT, { mbHideImg, "t", true })
+
+    do
+        local dragging = false
+        local dragInput, dragStart, startPos
+        local dragStartVector = Vector3.new(0, 0, 0)
+
+        mbHideBtn.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                dragging = true
+                dragStart = input.Position
+                dragStartVector = input.Position
+                startPos = mbHideBtn.Position
+            end
+        end)
+
+        mbHideBtn.InputChanged:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+                dragInput = input
+            end
+        end)
+
+        uis.InputChanged:Connect(function(input)
+            if input == dragInput and dragging then
+                local delta = input.Position - dragStart
+                mbHideBtn.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+            end
+        end)
+
+        uis.InputEnded:Connect(function(input)
+            if (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) and dragging then
+                dragging = false
+                local dist = (input.Position - dragStartVector).Magnitude
+                if dist < 6 then
+                    mf.Visible = not mf.Visible
+                end
+            end
+        end)
+    end
 
     local function updateMouseLockState()
         local isMobile = uis.TouchEnabled and not uis.KeyboardEnabled
@@ -4203,12 +4281,19 @@
             abScroll.CanvasSize = UDim2.new(0, 0, 0, abList.AbsoluteContentSize.Y + 10)
         end)
 
-        local abTogFunc = cTog(ccP, "Show Active Binds", false, function(v)
-            abWindow.Visible = v
-            if v then getgenv().YIX_RefreshBindsUI() end
-        end, true)
-        getgenv().YIX_ActiveBindsToggle = abTogFunc
-        local isMobile = uis.TouchEnabled and not uis.KeyboardEnabled
+        if isMobile then
+            cTog(ccP, "Enable Hide Button", cfg.mbHideBtnOn ~= false, function(v)
+                cfg.mbHideBtnOn = v
+                sCF()
+                if mbHideBtn then mbHideBtn.Visible = v end
+            end, true)
+        else
+            local abTogFunc = cTog(ccP, "Show Active Binds", false, function(v)
+                abWindow.Visible = v
+                if v then getgenv().YIX_RefreshBindsUI() end
+            end, true)
+            getgenv().YIX_ActiveBindsToggle = abTogFunc
+        end
 
         if not isMobile then
             cTog(ccP, "Unlock Mouse", cfg.unlockMouse == true, function(v)
