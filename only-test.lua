@@ -10,7 +10,8 @@ if not getgenv().AntiCheatBypassExecuted then
             "https://gist.githubusercontent.com/Wh01am001/b1096ae2280a45f52a7310f6ae8df69f/raw/e7ff2b7bec35701a7ea280aadb1b3c6cb6455b61/Anti.lua"))()
     end) --anti cheat bypass
 end
--- WH01AM | Silent Aim | Philly | Mobile FIXED v6
+
+-- WH01AM | Silent Aim | Philly | Mobile FIXED v7
 local Players       = game:GetService("Players")
 local RunService    = game:GetService("RunService")
 local RS            = game:GetService("ReplicatedStorage")
@@ -29,9 +30,6 @@ local CFG = {
     ShowFOV         = true,
     FOVColor        = Color3.fromRGB(255, 255, 255),
     TargetPart      = "Head",
-    Wallbang        = false,
-    MaxPenetrations = 3,
-    WallbangMark    = 0.5,
 }
 
 local firearmRemote = RS:FindFirstChild("firearmFunction")
@@ -122,7 +120,6 @@ end
 --  VISIBILITY CHECK
 -- ══════════════════════════════════════
 local function isVisible(targetPart)
-    if CFG.Wallbang then return true end
     if not CFG.WallCheck then return true end
     local localChar = LocalPlayer.Character
     local localHRP  = localChar and localChar:FindFirstChild("HumanoidRootPart")
@@ -183,57 +180,83 @@ RunService.RenderStepped:Connect(function()
 end)
 
 -- ══════════════════════════════════════
+--  MOBILE: pre-calcular RaycastResult
+--  al momento del disparo usando un raycast
+--  real hacia el target — guardado en cache
+--  para que el hook lo devuelva sin recursión
+-- ══════════════════════════════════════
+local cachedRaycastResult = nil
+local isDoingTargetRaycast = false
+
+local function computeTargetRaycast(t)
+    if isDoingTargetRaycast then return nil end
+    isDoingTargetRaycast = true
+
+    local localChar = LocalPlayer.Character
+    local localHead = localChar and localChar:FindFirstChild("Head")
+    local origin    = localHead and localHead.Position or Camera.CFrame.Position
+    local dir       = t.Position - origin
+
+    local params = RaycastParams.new()
+    params.FilterType                 = Enum.RaycastFilterType.Exclude
+    params.FilterDescendantsInstances = { localChar }
+
+    local result = workspace:Raycast(origin, dir, params)
+    isDoingTargetRaycast = false
+
+    if result then
+        local hitModel = result.Instance and result.Instance:FindFirstAncestorOfClass("Model")
+        if hitModel and Players:GetPlayerFromCharacter(hitModel) then
+            return result
+        end
+    end
+    return nil
+end
+
+-- Cuando el usuario dispara en mobile, pre-calcular el resultado
+-- escuchando el TouchStarted en el botón de disparo
+local isShootingFrame = false
+
+if isMobile then
+    local plrGui = LocalPlayer:WaitForChild("PlayerGui", 10)
+    local mobileGui = plrGui and plrGui:FindFirstChild("MobileGUI")
+    local shootBtn = mobileGui and mobileGui:FindFirstChild("shoot")
+
+    if shootBtn then
+        shootBtn.InputBegan:Connect(function()
+            isShootingFrame = true
+            local t = cachedTarget
+            if t and t.Parent then
+                cachedRaycastResult = computeTargetRaycast(t)
+            end
+        end)
+        shootBtn.InputEnded:Connect(function()
+            isShootingFrame = false
+            cachedRaycastResult = nil
+        end)
+        warn("[WH01AM] shoot button encontrado — hook mobile activo")
+    else
+        warn("[WH01AM] shoot button NO encontrado — intenta después de equipar arma")
+    end
+end
+
+-- ══════════════════════════════════════
 --  HOOK __namecall
---  En mobile el gun usa workspace:Raycast para calcular
---  el hit. Interceptamos Raycast y devolvemos un
---  RaycastResult falso apuntando al target.
---  En PC usamos Mouse.Hit via __index.
 -- ══════════════════════════════════════
 local oldNamecall
 oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
     local method = getnamecallmethod()
 
     if not checkcaller() then
-        -- MOBILE: interceptar workspace:Raycast
-        -- El gun llama workspace:Raycast(origin, direction, params)
-        -- Devolvemos un resultado falso apuntando al target
-        if isMobile and self == workspace and method == "Raycast" then
-            if CFG.Enabled then
-                local t = cachedTarget
-                if t and t.Parent and t:IsA("BasePart") then
-                    -- Llamar el raycast original primero
-                    local original = oldNamecall(self, ...)
-                    -- Si el raycast original ya pegó en el target, dejarlo pasar
-                    if original and original.Instance and original.Instance:IsDescendantOf(t.Parent.Parent or workspace) then
-                        local hitChar = original.Instance:FindFirstAncestorOfClass("Model")
-                        if hitChar and Players:GetPlayerFromCharacter(hitChar) then
-                            return original
-                        end
-                    end
-                    -- Hacer un raycast directo hacia el bone del target
-                    local localChar = LocalPlayer.Character
-                    local localHead = localChar and localChar:FindFirstChild("Head")
-                    local origin    = localHead and localHead.Position or Camera.CFrame.Position
-                    local dir       = (t.Position - origin)
-
-                    local params = RaycastParams.new()
-                    params.FilterType                 = Enum.RaycastFilterType.Exclude
-                    params.FilterDescendantsInstances = { localChar }
-
-                    local targetResult = workspace:Raycast(origin, dir, params)
-                    if targetResult then
-                        local hitModel = targetResult.Instance and targetResult.Instance:FindFirstAncestorOfClass("Model")
-                        if hitModel and Players:GetPlayerFromCharacter(hitModel) then
-                            return targetResult
-                        end
-                    end
-                    -- Si el raycast directo no llegó (hay pared), devolver el original
-                    return original
-                end
+        -- MOBILE: workspace:Raycast — devolver resultado pre-calculado
+        -- solo cuando estamos disparando y sin recursión
+        if isMobile and self == workspace and method == "Raycast" and not isDoingTargetRaycast then
+            if CFG.Enabled and isShootingFrame and cachedRaycastResult then
+                return cachedRaycastResult
             end
         end
 
-        -- PC: firearmFunction fallback
+        -- PC: firearmFunction
         if firearmRemote and self == firearmRemote and (method == "FireServer" or method == "InvokeServer") then
             if CFG.Enabled then
                 local t = cachedTarget
@@ -259,8 +282,7 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
 end))
 
 -- ══════════════════════════════════════
---  HOOK __index
---  PC: Mouse.Hit
+--  HOOK __index — PC Mouse.Hit
 -- ══════════════════════════════════════
 local Mouse = LocalPlayer:GetMouse()
 local oldIndex
