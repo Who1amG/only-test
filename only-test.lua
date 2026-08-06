@@ -10,7 +10,7 @@ if not getgenv().AntiCheatBypassExecuted then
             "https://gist.githubusercontent.com/Wh01am001/b1096ae2280a45f52a7310f6ae8df69f/raw/e7ff2b7bec35701a7ea280aadb1b3c6cb6455b61/Anti.lua"))()
     end) --anti cheat bypass
 end
--- WH01AM | Silent Aim | Philly | Mobile FIXED v5
+-- WH01AM | Silent Aim | Philly | Mobile FIXED v6
 local Players       = game:GetService("Players")
 local RunService    = game:GetService("RunService")
 local RS            = game:GetService("ReplicatedStorage")
@@ -119,39 +119,6 @@ local function updateFOVCircle()
 end
 
 -- ══════════════════════════════════════
---  WALLBANG
--- ══════════════════════════════════════
-local wallbangMarks = {}
-
-local function markWallbangPath(fromPos, toPos)
-    if not CFG.Wallbang then return end
-    local localChar = LocalPlayer.Character
-    local exclude   = localChar and { localChar } or {}
-    local params = RaycastParams.new()
-    params.FilterType                 = Enum.RaycastFilterType.Exclude
-    params.FilterDescendantsInstances = exclude
-    local pos       = fromPos
-    local dir       = toPos - fromPos
-    local remaining = dir.Magnitude
-    if remaining <= 0 then return end
-    local unit      = dir.Unit
-    local hopsLeft  = CFG.MaxPenetrations
-    while remaining > 0 and hopsLeft > 0 do
-        local result = workspace:Raycast(pos, unit * remaining, params)
-        if not result then break end
-        local charModel = result.Instance and result.Instance:FindFirstAncestorOfClass("Model")
-        if charModel and Players:GetPlayerFromCharacter(charModel) then break end
-        wallbangMarks[result.Instance] = tick() + CFG.WallbangMark
-        table.insert(exclude, result.Instance)
-        params.FilterDescendantsInstances = exclude
-        local traveled = (result.Position - pos).Magnitude
-        pos       = result.Position + unit * 0.05
-        remaining = remaining - traveled
-        hopsLeft  = hopsLeft - 1
-    end
-end
-
--- ══════════════════════════════════════
 --  VISIBILITY CHECK
 -- ══════════════════════════════════════
 local function isVisible(targetPart)
@@ -217,60 +184,57 @@ end)
 
 -- ══════════════════════════════════════
 --  HOOK __namecall
---  sendHit llama: Event:FireServer("fire", Instance, Vector3, Vector3, nil)
---  Reemplazamos con args fijos sin unpack para evitar corte del nil
+--  En mobile el gun usa workspace:Raycast para calcular
+--  el hit. Interceptamos Raycast y devolvemos un
+--  RaycastResult falso apuntando al target.
+--  En PC usamos Mouse.Hit via __index.
 -- ══════════════════════════════════════
 local oldNamecall
 oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
     local method = getnamecallmethod()
 
-    if not checkcaller() and (method == "FireServer" or method == "InvokeServer") then
-        local a1, a2, a3, a4, a5 = ...
-
-        -- Disparo: "fire" + BasePart + Vector3 pos + Vector3 normal + nil
-        if a1 == "fire" and typeof(a2) == "Instance" and typeof(a3) == "Vector3" then
+    if not checkcaller() then
+        -- MOBILE: interceptar workspace:Raycast
+        -- El gun llama workspace:Raycast(origin, direction, params)
+        -- Devolvemos un resultado falso apuntando al target
+        if isMobile and self == workspace and method == "Raycast" then
             if CFG.Enabled then
                 local t = cachedTarget
                 if t and t.Parent and t:IsA("BasePart") then
+                    -- Llamar el raycast original primero
+                    local original = oldNamecall(self, ...)
+                    -- Si el raycast original ya pegó en el target, dejarlo pasar
+                    if original and original.Instance and original.Instance:IsDescendantOf(t.Parent.Parent or workspace) then
+                        local hitChar = original.Instance:FindFirstAncestorOfClass("Model")
+                        if hitChar and Players:GetPlayerFromCharacter(hitChar) then
+                            return original
+                        end
+                    end
+                    -- Hacer un raycast directo hacia el bone del target
                     local localChar = LocalPlayer.Character
                     local localHead = localChar and localChar:FindFirstChild("Head")
                     local origin    = localHead and localHead.Position or Camera.CFrame.Position
-                    markWallbangPath(origin, t.Position)
+                    local dir       = (t.Position - origin)
 
-                    -- Estructura exacta que espera el server:
-                    -- FireServer("fire", BasePart, Vector3 pos, Vector3 normal, nil)
-                    return oldNamecall(self,
-                        "fire",
-                        t,
-                        t.Position,
-                        (t.Position - origin).Unit,
-                        nil
-                    )
-                end
-            end
-        end
+                    local params = RaycastParams.new()
+                    params.FilterType                 = Enum.RaycastFilterType.Exclude
+                    params.FilterDescendantsInstances = { localChar }
 
-        -- "send" = wallbang intermedio, mismo tratamiento
-        if a1 == "send" and typeof(a2) == "Instance" and typeof(a3) == "Vector3" then
-            if CFG.Enabled then
-                local t = cachedTarget
-                if t and t.Parent and t:IsA("BasePart") then
-                    local localChar = LocalPlayer.Character
-                    local localHead = localChar and localChar:FindFirstChild("Head")
-                    local origin    = localHead and localHead.Position or Camera.CFrame.Position
-                    return oldNamecall(self,
-                        "send",
-                        t,
-                        t.Position,
-                        (t.Position - origin).Unit,
-                        nil
-                    )
+                    local targetResult = workspace:Raycast(origin, dir, params)
+                    if targetResult then
+                        local hitModel = targetResult.Instance and targetResult.Instance:FindFirstAncestorOfClass("Model")
+                        if hitModel and Players:GetPlayerFromCharacter(hitModel) then
+                            return targetResult
+                        end
+                    end
+                    -- Si el raycast directo no llegó (hay pared), devolver el original
+                    return original
                 end
             end
         end
 
         -- PC: firearmFunction fallback
-        if firearmRemote and self == firearmRemote then
+        if firearmRemote and self == firearmRemote and (method == "FireServer" or method == "InvokeServer") then
             if CFG.Enabled then
                 local t = cachedTarget
                 if t and t.Parent then
@@ -296,18 +260,12 @@ end))
 
 -- ══════════════════════════════════════
 --  HOOK __index
+--  PC: Mouse.Hit
 -- ══════════════════════════════════════
 local Mouse = LocalPlayer:GetMouse()
 local oldIndex
 oldIndex = hookmetamethod(game, "__index", newcclosure(function(self, key)
     if not checkcaller() then
-        if CFG.Wallbang and key == "Transparency" then
-            local expire = wallbangMarks[self]
-            if expire then
-                if expire > tick() then return 0.5
-                else wallbangMarks[self] = nil end
-            end
-        end
         if not isMobile and self == Mouse and key == "Hit" then
             if CFG.Enabled then
                 local t = cachedTarget
