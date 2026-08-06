@@ -10,7 +10,7 @@ if not getgenv().AntiCheatBypassExecuted then
             "https://gist.githubusercontent.com/Wh01am001/b1096ae2280a45f52a7310f6ae8df69f/raw/e7ff2b7bec35701a7ea280aadb1b3c6cb6455b61/Anti.lua"))()
     end) --anti cheat bypass
 end
--- WH01AM | Silent Aim | Philly | Mobile FIXED v3
+-- WH01AM | Silent Aim | Philly | Mobile FIXED v4
 local Players       = game:GetService("Players")
 local RunService    = game:GetService("RunService")
 local RS            = game:GetService("ReplicatedStorage")
@@ -37,7 +37,7 @@ local CFG = {
 local firearmRemote = RS:FindFirstChild("firearmFunction")
 
 -- ══════════════════════════════════════
---  FRIENDLY CHECK — safe para mobile
+--  FRIENDLY CHECK
 -- ══════════════════════════════════════
 local IsPlayerFriendly = nil
 pcall(function()
@@ -191,21 +191,16 @@ local function getBestTarget()
     for _, plr in ipairs(Players:GetPlayers()) do
         if plr == LocalPlayer then continue end
         if not isEnemy(plr) then continue end
-
         local char = plr.Character
         local hum  = char and char:FindFirstChildOfClass("Humanoid")
         local bone = char and (char:FindFirstChild(CFG.TargetPart) or char:FindFirstChild("Head"))
-
         if not (hum and bone and hum.Health > 0) then continue end
         if (camPos - bone.Position).Magnitude > CFG.MaxDistance then continue end
-
         local screenPos, onScreen = Camera:WorldToViewportPoint(bone.Position)
         if not onScreen then continue end
-
         local dist2D = (Vector2.new(screenPos.X, screenPos.Y) - ref).Magnitude
         if dist2D >= bestDist then continue end
         if not isVisible(bone) then continue end
-
         bestDist = dist2D
         bestPart = bone
     end
@@ -224,13 +219,19 @@ end)
 
 -- ══════════════════════════════════════
 --  HOOK __namecall
+--  El gun usa Event:FireServer("fire", Instance, Vector3, Vector3, nil)
+--  Event es local al gun — interceptamos cualquier FireServer
+--  donde arg1 == "fire" y hay un Instance + Vector3
 -- ══════════════════════════════════════
 local oldNamecall
 oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
     local method = getnamecallmethod()
 
-    if not checkcaller() then
-        if isMobile and self == Camera and method == "ScreenPointToRay" then
+    if not checkcaller() and (method == "FireServer" or method == "InvokeServer") then
+        local args = { ... }
+
+        -- Detectar disparo: arg1 == "fire", arg2 == Instance, arg3 == Vector3
+        if args[1] == "fire" and typeof(args[2]) == "Instance" and typeof(args[3]) == "Vector3" then
             if CFG.Enabled then
                 local t = cachedTarget
                 if t and t.Parent then
@@ -238,17 +239,23 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
                     local localHead = localChar and localChar:FindFirstChild("Head")
                     local origin    = localHead and localHead.Position or Camera.CFrame.Position
                     markWallbangPath(origin, t.Position)
-                    local dir = (t.Position - Camera.CFrame.Position).Unit
-                    return Ray.new(Camera.CFrame.Position, dir * 999)
+
+                    -- arg2 = parte del target, arg3 = posición del target
+                    args[2] = t
+                    args[3] = t.Position
+                    -- arg4 = normal (dirección desde origin al target)
+                    args[4] = (t.Position - origin).Unit
+
+                    return oldNamecall(self, unpack(args))
                 end
             end
         end
 
-        if firearmRemote and self == firearmRemote and (method == "FireServer" or method == "InvokeServer") then
+        -- PC: firearmFunction fallback
+        if firearmRemote and self == firearmRemote then
             if CFG.Enabled then
                 local t = cachedTarget
                 if t and t.Parent then
-                    local args = { ... }
                     for i, v in ipairs(args) do
                         if typeof(v) == "Vector3" then
                             args[i] = t.Position
@@ -270,6 +277,7 @@ end))
 
 -- ══════════════════════════════════════
 --  HOOK __index
+--  PC: Mouse.Hit + Wallbang transparency
 -- ══════════════════════════════════════
 local Mouse = LocalPlayer:GetMouse()
 local oldIndex
