@@ -10,7 +10,7 @@ if not getgenv().AntiCheatBypassExecuted then
             "https://gist.githubusercontent.com/Wh01am001/b1096ae2280a45f52a7310f6ae8df69f/raw/e7ff2b7bec35701a7ea280aadb1b3c6cb6455b61/Anti.lua"))()
     end) --anti cheat bypass
 end
--- WH01AM | Silent Aim | Philly | Mobile FIXED v4
+-- WH01AM | Silent Aim | Philly | Mobile FIXED v5
 local Players       = game:GetService("Players")
 local RunService    = game:GetService("RunService")
 local RS            = game:GetService("ReplicatedStorage")
@@ -42,9 +42,7 @@ local firearmRemote = RS:FindFirstChild("firearmFunction")
 local IsPlayerFriendly = nil
 pcall(function()
     local result = filtergc("function", {Name = "IsPlayerFriendly"}, true)
-    if type(result) == "function" then
-        IsPlayerFriendly = result
-    end
+    if type(result) == "function" then IsPlayerFriendly = result end
 end)
 
 local friendCache = {}
@@ -219,34 +217,54 @@ end)
 
 -- ══════════════════════════════════════
 --  HOOK __namecall
---  El gun usa Event:FireServer("fire", Instance, Vector3, Vector3, nil)
---  Event es local al gun — interceptamos cualquier FireServer
---  donde arg1 == "fire" y hay un Instance + Vector3
+--  sendHit llama: Event:FireServer("fire", Instance, Vector3, Vector3, nil)
+--  Reemplazamos con args fijos sin unpack para evitar corte del nil
 -- ══════════════════════════════════════
 local oldNamecall
 oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
     local method = getnamecallmethod()
 
     if not checkcaller() and (method == "FireServer" or method == "InvokeServer") then
-        local args = { ... }
+        local a1, a2, a3, a4, a5 = ...
 
-        -- Detectar disparo: arg1 == "fire", arg2 == Instance, arg3 == Vector3
-        if args[1] == "fire" and typeof(args[2]) == "Instance" and typeof(args[3]) == "Vector3" then
+        -- Disparo: "fire" + BasePart + Vector3 pos + Vector3 normal + nil
+        if a1 == "fire" and typeof(a2) == "Instance" and typeof(a3) == "Vector3" then
             if CFG.Enabled then
                 local t = cachedTarget
-                if t and t.Parent then
+                if t and t.Parent and t:IsA("BasePart") then
                     local localChar = LocalPlayer.Character
                     local localHead = localChar and localChar:FindFirstChild("Head")
                     local origin    = localHead and localHead.Position or Camera.CFrame.Position
                     markWallbangPath(origin, t.Position)
 
-                    -- arg2 = parte del target, arg3 = posición del target
-                    args[2] = t
-                    args[3] = t.Position
-                    -- arg4 = normal (dirección desde origin al target)
-                    args[4] = (t.Position - origin).Unit
+                    -- Estructura exacta que espera el server:
+                    -- FireServer("fire", BasePart, Vector3 pos, Vector3 normal, nil)
+                    return oldNamecall(self,
+                        "fire",
+                        t,
+                        t.Position,
+                        (t.Position - origin).Unit,
+                        nil
+                    )
+                end
+            end
+        end
 
-                    return oldNamecall(self, unpack(args))
+        -- "send" = wallbang intermedio, mismo tratamiento
+        if a1 == "send" and typeof(a2) == "Instance" and typeof(a3) == "Vector3" then
+            if CFG.Enabled then
+                local t = cachedTarget
+                if t and t.Parent and t:IsA("BasePart") then
+                    local localChar = LocalPlayer.Character
+                    local localHead = localChar and localChar:FindFirstChild("Head")
+                    local origin    = localHead and localHead.Position or Camera.CFrame.Position
+                    return oldNamecall(self,
+                        "send",
+                        t,
+                        t.Position,
+                        (t.Position - origin).Unit,
+                        nil
+                    )
                 end
             end
         end
@@ -256,6 +274,7 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
             if CFG.Enabled then
                 local t = cachedTarget
                 if t and t.Parent then
+                    local args = { ... }
                     for i, v in ipairs(args) do
                         if typeof(v) == "Vector3" then
                             args[i] = t.Position
@@ -277,7 +296,6 @@ end))
 
 -- ══════════════════════════════════════
 --  HOOK __index
---  PC: Mouse.Hit + Wallbang transparency
 -- ══════════════════════════════════════
 local Mouse = LocalPlayer:GetMouse()
 local oldIndex
