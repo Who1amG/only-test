@@ -1,7 +1,7 @@
 if game.PlaceId ~= 130700367963690 and game.GameId ~= 130700367963690 then
     game:GetService("Players").LocalPlayer:Kick("BRU Are u dum? This is For Philly only bro...")
     return
-end
+end -- tha lil bro 
 
 if not getgenv().AntiCheatBypassExecuted then
     getgenv().AntiCheatBypassExecuted = true
@@ -2357,11 +2357,7 @@ end
         local isMobileDevice = uis.TouchEnabled and not uis.MouseEnabled
 
         local function updateMobileBtnVis()
-            if not isMobileDevice then
-                mbLockBtn.Visible = false
-                return
-            end
-            mbLockBtn.Visible = Config.MobileLockEnabled or Config.Enabled or Config.CamLockEnabled
+            if mbLockBtn then mbLockBtn.Visible = false end
         end
 
         do
@@ -2652,7 +2648,7 @@ end
         if lp.Character then bindChar(lp.Character) end
         lp.CharacterAdded:Connect(bindChar)
 
-        -- ===== Hooks: Mouse.Hit (PC) y Camera:ScreenPointToRay (mobile) =====
+        -- ===== Hooks: Mouse & Raycasting for PC and Mobile =====
         if hookmetamethod and getrawmetatable then
             local Mouse = lp:GetMouse()
 
@@ -2669,24 +2665,43 @@ end
                             end
                         end
                     end
-                    if self == Mouse and key == "Hit" then
-                        if Config.Enabled and checkEquipped(lp.Character) then
-                            local ok, target = pcall(getBestTarget)
-                            if ok and target then
-                                local origin = (lp.Character and lp.Character:FindFirstChild("Head")) and
-                                    lp.Character.Head.Position or workspace.CurrentCamera.CFrame.Position
-                                markWallbangPath(origin, target.Position)
-                                return CFrame.new(target.Position)
+                    local isMouse = (self == Mouse or tostring(self) == "Mouse" or (typeof(self) == "Instance" and self:IsA("Mouse")))
+                    if isMouse then
+                        if key == "Hit" then
+                            if Config.Enabled and checkEquipped(lp.Character) then
+                                local ok, target = pcall(getBestTarget)
+                                if ok and target then
+                                    local origin = (lp.Character and lp.Character:FindFirstChild("Head")) and
+                                        lp.Character.Head.Position or workspace.CurrentCamera.CFrame.Position
+                                    markWallbangPath(origin, target.Position)
+                                    return CFrame.new(target.Position)
+                                end
                             end
-                        end
-                        if Config.Wallbang and checkEquipped(lp.Character) then
-                            local hitCFrame = oldIndex(self, key)
-                            if hitCFrame then
-                                local origin = (lp.Character and lp.Character:FindFirstChild("Head")) and
-                                    lp.Character.Head.Position or workspace.CurrentCamera.CFrame.Position
-                                markWallbangPath(origin, hitCFrame.Position)
+                            if Config.Wallbang and checkEquipped(lp.Character) then
+                                local hitCFrame = oldIndex(self, key)
+                                if hitCFrame then
+                                    local origin = (lp.Character and lp.Character:FindFirstChild("Head")) and
+                                        lp.Character.Head.Position or workspace.CurrentCamera.CFrame.Position
+                                    markWallbangPath(origin, hitCFrame.Position)
+                                end
+                                return hitCFrame
                             end
-                            return hitCFrame
+                        elseif key == "Target" then
+                            if Config.Enabled and checkEquipped(lp.Character) then
+                                local ok, target = pcall(getBestTarget)
+                                if ok and target then
+                                    return target
+                                end
+                            end
+                        elseif key == "UnitRay" then
+                            if Config.Enabled and checkEquipped(lp.Character) then
+                                local ok, target = pcall(getBestTarget)
+                                if ok and target then
+                                    local cam = workspace.CurrentCamera
+                                    local origin = cam and cam.CFrame.Position or Vector3.new()
+                                    return Ray.new(origin, (target.Position - origin).Unit)
+                                end
+                            end
                         end
                     end
                 end
@@ -2705,7 +2720,9 @@ end
                             return oldNamecall(self, unpack(args))
                         end
                     end
-                    if cam and self == cam and method == "ScreenPointToRay" then
+
+                    -- Camera Ray methods (ScreenPointToRay & ViewportPointToRay)
+                    if cam and self == cam and (method == "ScreenPointToRay" or method == "ViewportPointToRay") then
                         if Config.Enabled and checkEquipped(lp.Character) then
                             local ok, target = pcall(getBestTarget)
                             if ok and target then
@@ -2713,6 +2730,39 @@ end
                                     lp.Character.Head.Position or cam.CFrame.Position
                                 markWallbangPath(origin, target.Position)
                                 return Ray.new(cam.CFrame.Position, (target.Position - cam.CFrame.Position).Unit)
+                            end
+                        end
+                    end
+
+                    -- Workspace Raycast method (Mobile guns & modern weapon engines)
+                    if (self == workspace or self == game) and method == "Raycast" then
+                        if Config.Enabled and checkEquipped(lp.Character) then
+                            local args = { ... }
+                            local origin = args[1]
+                            local direction = args[2]
+                            if typeof(origin) == "Vector3" and typeof(direction) == "Vector3" then
+                                local ok, target = pcall(getBestTarget)
+                                if ok and target then
+                                    markWallbangPath(origin, target.Position)
+                                    args[2] = (target.Position - origin).Unit * direction.Magnitude
+                                    return oldNamecall(self, unpack(args))
+                                end
+                            end
+                        end
+                    end
+
+                    -- Workspace FindPartOnRay / FindPartOnRayWithIgnoreList / FindPartOnRayWithWhiteList
+                    if (self == workspace or self == game) and (method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRayWithWhiteList" or method == "FindPartOnRay") then
+                        if Config.Enabled and checkEquipped(lp.Character) then
+                            local args = { ... }
+                            local ray = args[1]
+                            if typeof(ray) == "Ray" then
+                                local ok, target = pcall(getBestTarget)
+                                if ok and target then
+                                    markWallbangPath(ray.Origin, target.Position)
+                                    args[1] = Ray.new(ray.Origin, (target.Position - ray.Origin).Unit * ray.Direction.Magnitude)
+                                    return oldNamecall(self, unpack(args))
+                                end
                             end
                         end
                     end
