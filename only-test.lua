@@ -10,7 +10,7 @@ if not getgenv().AntiCheatBypassExecuted then
             "https://gist.githubusercontent.com/Wh01am001/b1096ae2280a45f52a7310f6ae8df69f/raw/e7ff2b7bec35701a7ea280aadb1b3c6cb6455b61/Anti.lua"))()
     end) --anti cheat bypass
 end
--- WH01AM | Silent Aim | Philly | Mobile FIXED
+-- WH01AM | Silent Aim | Philly | Mobile FIXED v2
 local Players       = game:GetService("Players")
 local RunService    = game:GetService("RunService")
 local RS            = game:GetService("ReplicatedStorage")
@@ -33,6 +33,11 @@ local CFG = {
     MaxPenetrations = 3,
     WallbangMark    = 0.5,
 }
+
+-- ══════════════════════════════════════
+--  CACHEAR REMOTE ANTES DEL HOOK
+-- ══════════════════════════════════════
+local firearmRemote = RS:FindFirstChild("firearmFunction")
 
 -- ══════════════════════════════════════
 --  FRIENDLY CHECK
@@ -103,29 +108,10 @@ local function updateFOVCircle()
 end
 
 -- ══════════════════════════════════════
---  VISIBILITY CHECK
+--  WALLBANG
 -- ══════════════════════════════════════
 local wallbangMarks = {}
 
-local function isVisible(targetPart)
-    if CFG.Wallbang then return true end
-    if not CFG.WallCheck then return true end
-    local localChar = LocalPlayer.Character
-    local localHRP  = localChar and localChar:FindFirstChild("HumanoidRootPart")
-    if not localHRP then return true end
-    local params = RaycastParams.new()
-    params.FilterType                 = Enum.RaycastFilterType.Exclude
-    params.FilterDescendantsInstances = { localChar }
-    params.IgnoreWater                = true
-    local result = workspace:Raycast(localHRP.Position, targetPart.Position - localHRP.Position, params)
-    if not result then return true end
-    local hitChar = result.Instance and result.Instance:FindFirstAncestorOfClass("Model")
-    return hitChar ~= nil and Players:GetPlayerFromCharacter(hitChar) ~= nil
-end
-
--- ══════════════════════════════════════
---  WALLBANG
--- ══════════════════════════════════════
 local function markWallbangPath(fromPos, toPos)
     if not CFG.Wallbang then return end
     local localChar = LocalPlayer.Character
@@ -152,6 +138,25 @@ local function markWallbangPath(fromPos, toPos)
         remaining = remaining - traveled
         hopsLeft  = hopsLeft - 1
     end
+end
+
+-- ══════════════════════════════════════
+--  VISIBILITY CHECK
+-- ══════════════════════════════════════
+local function isVisible(targetPart)
+    if CFG.Wallbang then return true end
+    if not CFG.WallCheck then return true end
+    local localChar = LocalPlayer.Character
+    local localHRP  = localChar and localChar:FindFirstChild("HumanoidRootPart")
+    if not localHRP then return true end
+    local params = RaycastParams.new()
+    params.FilterType                 = Enum.RaycastFilterType.Exclude
+    params.FilterDescendantsInstances = { localChar }
+    params.IgnoreWater                = true
+    local result = workspace:Raycast(localHRP.Position, targetPart.Position - localHRP.Position, params)
+    if not result then return true end
+    local hitChar = result.Instance and result.Instance:FindFirstAncestorOfClass("Model")
+    return hitChar ~= nil and Players:GetPlayerFromCharacter(hitChar) ~= nil
 end
 
 -- ══════════════════════════════════════
@@ -202,18 +207,13 @@ end)
 
 -- ══════════════════════════════════════
 --  HOOK __namecall
---  PC:     Mouse.Hit via __index
---  Mobile: Camera:ScreenPointToRay hook
---          El gun client llama ScreenPointToRay
---          con la posición del Crosshair —
---          devolvemos un Ray apuntando al target
 -- ══════════════════════════════════════
 local oldNamecall
 oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
     local method = getnamecallmethod()
 
     if not checkcaller() then
-        -- MOBILE: interceptar ScreenPointToRay
+        -- MOBILE: ScreenPointToRay hook
         if isMobile and self == Camera and method == "ScreenPointToRay" then
             if CFG.Enabled then
                 local t = cachedTarget
@@ -228,8 +228,7 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
             end
         end
 
-        -- PC: firearmFunction fallback
-        local firearmRemote = RS:FindFirstChild("firearmFunction")
+        -- PC: firearmFunction hook (remote ya cacheado arriba)
         if firearmRemote and self == firearmRemote and (method == "FireServer" or method == "InvokeServer") then
             if CFG.Enabled then
                 local t = cachedTarget
@@ -258,6 +257,7 @@ end))
 --  HOOK __index
 --  PC: Mouse.Hit + Wallbang transparency
 -- ══════════════════════════════════════
+local Mouse = LocalPlayer:GetMouse()
 local oldIndex
 oldIndex = hookmetamethod(game, "__index", newcclosure(function(self, key)
     if not checkcaller() then
@@ -268,7 +268,7 @@ oldIndex = hookmetamethod(game, "__index", newcclosure(function(self, key)
                 else wallbangMarks[self] = nil end
             end
         end
-        if not isMobile and self == LocalPlayer:GetMouse() and key == "Hit" then
+        if not isMobile and self == Mouse and key == "Hit" then
             if CFG.Enabled then
                 local t = cachedTarget
                 if t and t.Parent then
