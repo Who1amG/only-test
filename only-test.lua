@@ -10,8 +10,7 @@ if not getgenv().AntiCheatBypassExecuted then
             "https://gist.githubusercontent.com/Wh01am001/b1096ae2280a45f52a7310f6ae8df69f/raw/e7ff2b7bec35701a7ea280aadb1b3c6cb6455b61/Anti.lua"))()
     end) --anti cheat bypass
 end
-
--- WH01AM | Silent Aim | Philly | Medium + Mobile
+-- WH01AM | Silent Aim | Philly | Mobile FIXED
 local Players       = game:GetService("Players")
 local RunService    = game:GetService("RunService")
 local RS            = game:GetService("ReplicatedStorage")
@@ -19,9 +18,11 @@ local UIS           = game:GetService("UserInputService")
 local LocalPlayer   = Players.LocalPlayer
 local Camera        = workspace.CurrentCamera
 
+local isMobile = UIS.TouchEnabled and not UIS.KeyboardEnabled
+
 local CFG = {
     Enabled         = true,
-    FOV             = 120,
+    FOV             = isMobile and 350 or 120,
     WallCheck       = true,
     FriendCheck     = true,
     MaxDistance     = 1000,
@@ -33,13 +34,10 @@ local CFG = {
     WallbangMark    = 0.5,
 }
 
-local isMobile = UIS.TouchEnabled and not UIS.KeyboardEnabled
-
 -- ══════════════════════════════════════
 --  FRIENDLY CHECK
 -- ══════════════════════════════════════
 local IsPlayerFriendly = filtergc("function", {Name = "IsPlayerFriendly"}, true)
-
 local friendCache = {}
 local function isFriend(plr)
     if not CFG.FriendCheck then return false end
@@ -70,11 +68,9 @@ if isMobile then
     uiFOV.Visible = false
     uiFOV.ZIndex = 500
     uiFOV.Parent = sg
-
     local corner = Instance.new("UICorner")
     corner.CornerRadius = UDim.new(1, 0)
     corner.Parent = uiFOV
-
     local stroke = Instance.new("UIStroke")
     stroke.Color = CFG.FOVColor
     stroke.Thickness = 1.5
@@ -93,13 +89,11 @@ end
 local function updateFOVCircle()
     local show   = CFG.Enabled and CFG.ShowFOV
     local center = Camera.ViewportSize / 2
-
     if isMobile and uiFOV then
         uiFOV.Visible = show
         if show then
-            local rad = CFG.FOV
             uiFOV.Position = UDim2.new(0, center.X, 0, center.Y)
-            uiFOV.Size = UDim2.new(0, rad * 2, 0, rad * 2)
+            uiFOV.Size = UDim2.new(0, CFG.FOV * 2, 0, CFG.FOV * 2)
         end
     elseif FOVCircle then
         FOVCircle.Visible  = show
@@ -109,56 +103,10 @@ local function updateFOVCircle()
 end
 
 -- ══════════════════════════════════════
---  REFERENCE POINT
---  PC: mouse | Mobile: centro pantalla
--- ══════════════════════════════════════
-local function getReferencePoint()
-    if isMobile then
-        return Camera.ViewportSize / 2
-    end
-    local mp = UIS:GetMouseLocation()
-    return Vector2.new(mp.X, mp.Y)
-end
-
--- ══════════════════════════════════════
---  WALLBANG SYSTEM
+--  VISIBILITY CHECK
 -- ══════════════════════════════════════
 local wallbangMarks = {}
 
-local function markWallbangPath(fromPos, toPos)
-    if not CFG.Wallbang then return end
-    local localChar = LocalPlayer.Character
-    local exclude   = localChar and { localChar } or {}
-
-    local params = RaycastParams.new()
-    params.FilterType                 = Enum.RaycastFilterType.Exclude
-    params.FilterDescendantsInstances = exclude
-
-    local pos       = fromPos
-    local dir       = toPos - fromPos
-    local remaining = dir.Magnitude
-    if remaining <= 0 then return end
-    local unit      = dir.Unit
-    local hopsLeft  = CFG.MaxPenetrations
-
-    while remaining > 0 and hopsLeft > 0 do
-        local result = workspace:Raycast(pos, unit * remaining, params)
-        if not result then break end
-        local charModel = result.Instance and result.Instance:FindFirstAncestorOfClass("Model")
-        if charModel and Players:GetPlayerFromCharacter(charModel) then break end
-        wallbangMarks[result.Instance] = tick() + CFG.WallbangMark
-        table.insert(exclude, result.Instance)
-        params.FilterDescendantsInstances = exclude
-        local traveled = (result.Position - pos).Magnitude
-        pos       = result.Position + unit * 0.05
-        remaining = remaining - traveled
-        hopsLeft  = hopsLeft - 1
-    end
-end
-
--- ══════════════════════════════════════
---  VISIBILITY CHECK
--- ══════════════════════════════════════
 local function isVisible(targetPart)
     if CFG.Wallbang then return true end
     if not CFG.WallCheck then return true end
@@ -176,12 +124,47 @@ local function isVisible(targetPart)
 end
 
 -- ══════════════════════════════════════
---  TARGET SELECTION
---  Sin mobile lock — solo FOV hard cutoff
+--  WALLBANG
 -- ══════════════════════════════════════
+local function markWallbangPath(fromPos, toPos)
+    if not CFG.Wallbang then return end
+    local localChar = LocalPlayer.Character
+    local exclude   = localChar and { localChar } or {}
+    local params = RaycastParams.new()
+    params.FilterType                 = Enum.RaycastFilterType.Exclude
+    params.FilterDescendantsInstances = exclude
+    local pos       = fromPos
+    local dir       = toPos - fromPos
+    local remaining = dir.Magnitude
+    if remaining <= 0 then return end
+    local unit      = dir.Unit
+    local hopsLeft  = CFG.MaxPenetrations
+    while remaining > 0 and hopsLeft > 0 do
+        local result = workspace:Raycast(pos, unit * remaining, params)
+        if not result then break end
+        local charModel = result.Instance and result.Instance:FindFirstAncestorOfClass("Model")
+        if charModel and Players:GetPlayerFromCharacter(charModel) then break end
+        wallbangMarks[result.Instance] = tick() + CFG.WallbangMark
+        table.insert(exclude, result.Instance)
+        params.FilterDescendantsInstances = exclude
+        local traveled = (result.Position - pos).Magnitude
+        pos       = result.Position + unit * 0.05
+        remaining = remaining - traveled
+        hopsLeft  = hopsLeft - 1
+    end
+end
+
+-- ══════════════════════════════════════
+--  TARGET SELECTION
+-- ══════════════════════════════════════
+local function getReferencePoint()
+    if isMobile then return Camera.ViewportSize / 2 end
+    local mp = UIS:GetMouseLocation()
+    return Vector2.new(mp.X, mp.Y)
+end
+
 local function getBestTarget()
     if not CFG.Enabled then return nil end
-
     local ref      = getReferencePoint()
     local bestDist = CFG.FOV
     local bestPart = nil
@@ -191,21 +174,16 @@ local function getBestTarget()
         if plr == LocalPlayer then continue end
         if IsPlayerFriendly and IsPlayerFriendly(plr) then continue end
         if isFriend(plr) then continue end
-
         local char = plr.Character
         local hum  = char and char:FindFirstChildOfClass("Humanoid")
         local bone = char and (char:FindFirstChild(CFG.TargetPart) or char:FindFirstChild("Head"))
-
         if not (hum and bone and hum.Health > 0) then continue end
         if (camPos - bone.Position).Magnitude > CFG.MaxDistance then continue end
-
         local screenPos, onScreen = Camera:WorldToViewportPoint(bone.Position)
         if not onScreen then continue end
-
         local dist2D = (Vector2.new(screenPos.X, screenPos.Y) - ref).Magnitude
         if dist2D >= bestDist then continue end
         if not isVisible(bone) then continue end
-
         bestDist = dist2D
         bestPart = bone
     end
@@ -223,18 +201,20 @@ RunService.RenderStepped:Connect(function()
 end)
 
 -- ══════════════════════════════════════
---  HOOK: firearmFunction __namecall
+--  HOOK __namecall
+--  PC:     Mouse.Hit via __index
+--  Mobile: Camera:ScreenPointToRay hook
+--          El gun client llama ScreenPointToRay
+--          con la posición del Crosshair —
+--          devolvemos un Ray apuntando al target
 -- ══════════════════════════════════════
-local firearmRemote = RS:FindFirstChild("firearmFunction")
+local oldNamecall
+oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
+    local method = getnamecallmethod()
 
-if not firearmRemote then
-    warn("[WH01AM] firearmFunction not found")
-else
-    local oldNamecall
-    oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
-        local method = getnamecallmethod()
-
-        if not checkcaller() and self == firearmRemote and (method == "FireServer" or method == "InvokeServer") then
+    if not checkcaller() then
+        -- MOBILE: interceptar ScreenPointToRay
+        if isMobile and self == Camera and method == "ScreenPointToRay" then
             if CFG.Enabled then
                 local t = cachedTarget
                 if t and t.Parent then
@@ -242,7 +222,18 @@ else
                     local localHead = localChar and localChar:FindFirstChild("Head")
                     local origin    = localHead and localHead.Position or Camera.CFrame.Position
                     markWallbangPath(origin, t.Position)
+                    local dir = (t.Position - Camera.CFrame.Position).Unit
+                    return Ray.new(Camera.CFrame.Position, dir * 999)
+                end
+            end
+        end
 
+        -- PC: firearmFunction fallback
+        local firearmRemote = RS:FindFirstChild("firearmFunction")
+        if firearmRemote and self == firearmRemote and (method == "FireServer" or method == "InvokeServer") then
+            if CFG.Enabled then
+                local t = cachedTarget
+                if t and t.Parent then
                     local args = { ... }
                     for i, v in ipairs(args) do
                         if typeof(v) == "Vector3" then
@@ -258,43 +249,36 @@ else
                 end
             end
         end
+    end
 
-        return oldNamecall(self, ...)
-    end))
-
-    warn("[WH01AM] firearmFunction hook activo")
-end
+    return oldNamecall(self, ...)
+end))
 
 -- ══════════════════════════════════════
---  HOOK: __index
---  Mouse.Hit fallback (PC) + Wallbang transparency
+--  HOOK __index
+--  PC: Mouse.Hit + Wallbang transparency
 -- ══════════════════════════════════════
-if hookmetamethod and getrawmetatable then
-    local Mouse = LocalPlayer:GetMouse()
-    local oldIndex
-    oldIndex = hookmetamethod(game, "__index", newcclosure(function(self, key)
-        if not checkcaller() then
-            if CFG.Wallbang and key == "Transparency" then
-                local expire = wallbangMarks[self]
-                if expire then
-                    if expire > tick() then return 0.5
-                    else wallbangMarks[self] = nil end
-                end
+local oldIndex
+oldIndex = hookmetamethod(game, "__index", newcclosure(function(self, key)
+    if not checkcaller() then
+        if CFG.Wallbang and key == "Transparency" then
+            local expire = wallbangMarks[self]
+            if expire then
+                if expire > tick() then return 0.5
+                else wallbangMarks[self] = nil end
             end
-            if not isMobile and self == Mouse and key == "Hit" then
-                if CFG.Enabled then
-                    local t = cachedTarget
-                    if t and t.Parent then
-                        return CFrame.new(t.Position)
-                    end
+        end
+        if not isMobile and self == LocalPlayer:GetMouse() and key == "Hit" then
+            if CFG.Enabled then
+                local t = cachedTarget
+                if t and t.Parent then
+                    return CFrame.new(t.Position)
                 end
             end
         end
-        return oldIndex(self, key)
-    end))
-
-    warn("[WH01AM] __index hook activo")
-end
+    end
+    return oldIndex(self, key)
+end))
 
 -- ══════════════════════════════════════
 --  UNLOAD
