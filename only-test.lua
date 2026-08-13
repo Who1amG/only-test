@@ -1,4 +1,4 @@
--- WH01AM | Auto Rapper | Vice City 2 | Multi-Resolution v2
+-- WH01AM | Auto Rapper | Vice City 2 | Multi-Resolution v3
 local Players    = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local CS         = game:GetService("CollectionService")
@@ -11,12 +11,6 @@ local KEYS = {
     [3] = Enum.KeyCode.K,
     [4] = Enum.KeyCode.L,
 }
-
--- Threshold calibrado para mobile y PC
--- Mobile: nodo ~35px, pico ~0.65-0.98
--- PC: nodo ~68px, pico similar
--- Presionar apenas pct sube de 0.50 = centro de la zona = Perfect
-local HIT_PCT = 0.50
 
 local nodeData = {}
 local rapConn  = nil
@@ -68,14 +62,15 @@ local function startAuto()
             local curY = node.AbsolutePosition.Y
 
             if not nodeData[id] then
-                nodeData[id] = { pressed = false, lastY = curY }
+                nodeData[id] = { pressed = false, lastY = curY, prevPct = 0 }
             end
 
             local data = nodeData[id]
 
             -- Resetear si reusado
             if curY < data.lastY - 30 then
-                data.pressed = false
+                data.pressed  = false
+                data.prevPct  = 0
             end
             data.lastY = curY
 
@@ -84,13 +79,18 @@ local function startAuto()
             local target = Holder:FindFirstChild(tostring(idx))
             if not target then continue end
 
-            local pct = getIntersectionPct(node, target)
+            local pct  = getIntersectionPct(node, target)
+            local jump = pct - data.prevPct
 
-            -- Presionar apenas cruza el threshold
-            if pct >= HIT_PCT then
+            -- Presionar cuando:
+            -- 1. Salto grande en un frame (mobile) = nodo entró de golpe
+            -- 2. pct alto y estable (PC) = nodo en zona lentamente
+            if (jump > 0.30 and pct > 0.40) or (pct > 0.60 and jump > 0) then
                 data.pressed = true
                 pressKey(idx)
             end
+
+            data.prevPct = pct
         end
     end)
 end
@@ -117,4 +117,4 @@ if LocalPlayer.PlayerGui:FindFirstChild("RapUI") then startAuto() end
 getgenv().WH01AM_RAP_START = startAuto
 getgenv().WH01AM_RAP_STOP  = stopAuto
 
-warn("[WH01AM] Auto Rapper listo — v2 Multi-Resolution")
+warn("[WH01AM] Auto Rapper listo — v3")
