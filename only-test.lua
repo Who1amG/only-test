@@ -1,4 +1,3 @@
--- WH01AM | Auto Rapper | Vice City 2
 local Players    = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local CS         = game:GetService("CollectionService")
@@ -6,25 +5,18 @@ local vim        = game:GetService("VirtualInputManager")
 local UIS        = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 
-if getgenv().WH01AM_RAP_UNLOAD then
-    getgenv().WH01AM_RAP_UNLOAD()
-end
+if getgenv().WH01AM_RAP_UNLOAD then getgenv().WH01AM_RAP_UNLOAD() end
 
 local isMobile = UIS.TouchEnabled and not UIS.KeyboardEnabled
 local KEYS = {[1]=Enum.KeyCode.H,[2]=Enum.KeyCode.J,[3]=Enum.KeyCode.K,[4]=Enum.KeyCode.L}
 local nodeData = {}
 local rapConn  = nil
+local polling  = true
 local enabled  = true
 
--- PC: dist < 30 (probado y funciona)
--- Mobile: nodeMin=35.5, dist < 30 da Bad porque el nodo es más pequeño
--- En mobile usar dist absoluta < 12 que es proporcional a 30/68 * 35 = 15
--- Pero eso da miss... entonces el problema es el loop frequency
--- Solución: en mobile usar stepped que corre cada frame de render
 local DIST_PC     = 30
-local DIST_MOBILE = 30  -- mismo threshold pero con RenderStepped
+local DIST_MOBILE = 20  -- calibrado de los datos: Perfect = dist 18-22
 
--- UI
 local sg = Instance.new("ScreenGui")
 sg.Name = "WH01AM_RAP_UI"
 sg.ResetOnSpawn = false
@@ -87,7 +79,7 @@ local function pressKey(idx)
     vim:SendKeyEvent(false, KEYS[idx], false, game)
 end
 
-local function checkNodes(dist_threshold)
+local function checkNodes(threshold)
     local ui = LocalPlayer.PlayerGui:FindFirstChild("RapUI")
     if not ui then return end
     local Game = ui.MainFrame:FindFirstChild("Game")
@@ -122,7 +114,7 @@ local function checkNodes(dist_threshold)
         if not target then continue end
 
         local dist = (node.AbsolutePosition - target.AbsolutePosition).Magnitude
-        if dist < dist_threshold then
+        if dist < threshold then
             data.pressed = true
             pressKey(idx)
         end
@@ -132,19 +124,31 @@ end
 local function startAuto()
     if rapConn then rapConn:Disconnect() end
     nodeData = {}
+    polling = true
 
-    -- Mobile usa RenderStepped (más frames), PC usa Heartbeat
-    local signal = isMobile and RunService.RenderStepped or RunService.Heartbeat
-    local threshold = isMobile and DIST_MOBILE or DIST_PC
-
-    rapConn = signal:Connect(function()
-        if not enabled then return end
-        checkNodes(threshold)
-    end)
+    if isMobile then
+        -- Mobile: polling a 0.008s = ~125 checks/s para no saltarse frames
+        task.spawn(function()
+            while polling do
+                task.wait(0.008)
+                if enabled then checkNodes(DIST_MOBILE) end
+            end
+        end)
+        rapConn = {Disconnect = function() polling = false end}
+    else
+        -- PC: Heartbeat normal
+        rapConn = RunService.Heartbeat:Connect(function()
+            if enabled then checkNodes(DIST_PC) end
+        end)
+    end
 end
 
 local function stopAuto()
-    if rapConn then rapConn:Disconnect() rapConn = nil end
+    polling = false
+    if rapConn and rapConn.Disconnect then
+        pcall(function() rapConn:Disconnect() end)
+    end
+    rapConn = nil
     nodeData = {}
 end
 
@@ -157,12 +161,12 @@ end)
 
 if LocalPlayer.PlayerGui:FindFirstChild("RapUI") then startAuto() end
 
-getgenv().WH01AM_RAP_START  = startAuto
-getgenv().WH01AM_RAP_STOP   = stopAuto
+getgenv().WH01AM_RAP_START = startAuto
+getgenv().WH01AM_RAP_STOP = stopAuto
 getgenv().WH01AM_RAP_UNLOAD = function()
     stopAuto()
     sg:Destroy()
     warn("[WH01AM] Auto Rapper descargado")
 end
 
-warn("[WH01AM] Auto Rapper listo — " .. (isMobile and "Mobile/RenderStepped" or "PC/Heartbeat"))
+warn("[WH01AM] Auto Rapper — " .. (isMobile and "Mobile dist<20 polling" or "PC dist<30 Heartbeat"))
