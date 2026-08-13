@@ -1,4 +1,4 @@
--- WH01AM | Auto Rapper | Vice City 2 | vCalibrated
+-- WH01AM | Auto Rapper | Vice City 2
 local Players    = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local CS         = game:GetService("CollectionService")
@@ -6,29 +6,16 @@ local vim        = game:GetService("VirtualInputManager")
 local UIS        = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 
-if getgenv().WH01AM_RAP_LOADED then
-    warn("[WH01AM] Ya cargado")
-    return
+if getgenv().WH01AM_RAP_UNLOAD then
+    getgenv().WH01AM_RAP_UNLOAD()
 end
-getgenv().WH01AM_RAP_LOADED = true
 
-local isMobile = UIS.TouchEnabled and not UIS.KeyboardEnabled
 local KEYS = {[1]=Enum.KeyCode.H,[2]=Enum.KeyCode.J,[3]=Enum.KeyCode.K,[4]=Enum.KeyCode.L}
-
--- Threshold como ratio del nodeSize
--- PC: nodeSize~68, threshold 30 = ratio 0.44
--- Mobile: nodeSize~35, mismo ratio = 35*0.44 = 15.4
--- Pero mobile da miss/okay entonces subimos ratio a 0.60
--- 35 * 0.60 = 21 -- zone más amplia para mobile
-local THRESHOLD_RATIO = isMobile and 0.60 or 0.44
-
 local nodeData = {}
 local rapConn  = nil
 local enabled  = true
 
--- ══════════════════════════════════════
---  UI
--- ══════════════════════════════════════
+-- UI
 local sg = Instance.new("ScreenGui")
 sg.Name           = "WH01AM_RAP_UI"
 sg.ResetOnSpawn   = false
@@ -86,9 +73,6 @@ UIS.InputEnded:Connect(function(input)
     end
 end)
 
--- ══════════════════════════════════════
---  CORE
--- ══════════════════════════════════════
 local function pressKey(idx)
     vim:SendKeyEvent(true,  KEYS[idx], false, game)
     vim:SendKeyEvent(false, KEYS[idx], false, game)
@@ -100,7 +84,6 @@ local function startAuto()
 
     rapConn = RunService.Heartbeat:Connect(function()
         if not enabled then return end
-
         local ui = LocalPlayer.PlayerGui:FindFirstChild("RapUI")
         if not ui then return end
         local Game = ui.MainFrame:FindFirstChild("Game")
@@ -111,10 +94,8 @@ local function startAuto()
 
         for _, node in ipairs(BG:GetChildren()) do
             if not node:IsA("ImageLabel") or not node.Visible then continue end
-
             local okT, tags = pcall(CS.GetTags, CS, node)
             if not okT then continue end
-
             local idx = nil
             for _, tag in ipairs(tags) do
                 local n = tag:match("Node (%d+)")
@@ -122,31 +103,22 @@ local function startAuto()
             end
             if not idx then continue end
 
-            local id      = tostring(node)
-            local curY    = node.AbsolutePosition.Y
-            -- Calcular threshold dinámico basado en nodeSize real
-            local nodeMin = math.min(node.AbsoluteSize.X, node.AbsoluteSize.Y)
-            local thresh  = nodeMin * THRESHOLD_RATIO
+            local id   = tostring(node)
+            local curY = node.AbsolutePosition.Y
 
             if not nodeData[id] then
                 nodeData[id] = { pressed = false, lastY = curY }
             end
-
             local data = nodeData[id]
-
-            if curY < data.lastY - 100 then
-                data.pressed = false
-            end
+            if curY < data.lastY - 100 then data.pressed = false end
             data.lastY = curY
-
             if data.pressed then continue end
 
             local target = Holder:FindFirstChild(tostring(idx))
             if not target then continue end
 
             local dist = (node.AbsolutePosition - target.AbsolutePosition).Magnitude
-
-            if dist < thresh then
+            if dist < 30 then
                 data.pressed = true
                 pressKey(idx)
             end
@@ -173,11 +145,7 @@ getgenv().WH01AM_RAP_STOP   = stopAuto
 getgenv().WH01AM_RAP_UNLOAD = function()
     stopAuto()
     sg:Destroy()
-    getgenv().WH01AM_RAP_LOADED = nil
     warn("[WH01AM] Auto Rapper descargado")
 end
 
-warn(string.format("[WH01AM] Auto Rapper listo — %s | ratio=%.2f | thresh≈%.1f",
-    isMobile and "Mobile" or "PC",
-    THRESHOLD_RATIO,
-    35.5 * THRESHOLD_RATIO))
+warn("[WH01AM] Auto Rapper listo")
