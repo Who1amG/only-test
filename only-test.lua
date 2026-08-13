@@ -1,5 +1,4 @@
--- WH01AM | Auto Rapper | Vice City 2
--- Anti-duplicate + Toggle UI
+-- WH01AM | Auto Rapper | Vice City 2 | vCalibrated
 local Players    = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local CS         = game:GetService("CollectionService")
@@ -7,57 +6,53 @@ local vim        = game:GetService("VirtualInputManager")
 local UIS        = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 
--- Anti-duplicate
 if getgenv().WH01AM_RAP_LOADED then
-    warn("[WH01AM] Auto Rapper ya está cargado")
+    warn("[WH01AM] Ya cargado")
     return
 end
 getgenv().WH01AM_RAP_LOADED = true
 
 local isMobile = UIS.TouchEnabled and not UIS.KeyboardEnabled
-
 local KEYS = {[1]=Enum.KeyCode.H,[2]=Enum.KeyCode.J,[3]=Enum.KeyCode.K,[4]=Enum.KeyCode.L}
 
--- En mobile el nodo es más pequeño (35px vs 68px en PC)
--- dist < 30 funciona en PC, mobile necesita proporcional
-local DIST_THRESHOLD = isMobile and 15 or 30
+-- Threshold como ratio del nodeSize
+-- PC: nodeSize~68, threshold 30 = ratio 0.44
+-- Mobile: nodeSize~35, mismo ratio = 35*0.44 = 15.4
+-- Pero mobile da miss/okay entonces subimos ratio a 0.60
+-- 35 * 0.60 = 21 -- zone más amplia para mobile
+local THRESHOLD_RATIO = isMobile and 0.60 or 0.44
 
 local nodeData = {}
 local rapConn  = nil
 local enabled  = true
 
 -- ══════════════════════════════════════
---  TOGGLE UI
+--  UI
 -- ══════════════════════════════════════
 local sg = Instance.new("ScreenGui")
-sg.Name             = "WH01AM_RAP_UI"
-sg.ResetOnSpawn     = false
-sg.IgnoreGuiInset   = true
-sg.DisplayOrder     = 999
-sg.Parent           = game:GetService("CoreGui")
+sg.Name           = "WH01AM_RAP_UI"
+sg.ResetOnSpawn   = false
+sg.IgnoreGuiInset = true
+sg.DisplayOrder   = 999
+sg.Parent         = game:GetService("CoreGui")
 
 local btn = Instance.new("TextButton")
-btn.Size                  = UDim2.new(0, 120, 0, 36)
-btn.Position              = UDim2.new(0, 10, 0, 10)
-btn.BackgroundColor3      = Color3.fromRGB(20, 20, 25)
-btn.TextColor3            = Color3.fromRGB(80, 220, 140)
-btn.Text                  = "🎤 RAP: ON"
-btn.TextSize              = 14
-btn.Font                  = Enum.Font.GothamBold
-btn.AutoButtonColor       = false
-btn.ZIndex                = 999
-btn.Parent                = sg
+btn.Size             = UDim2.new(0, 120, 0, 36)
+btn.Position         = UDim2.new(0, 10, 0, 10)
+btn.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+btn.TextColor3       = Color3.fromRGB(80, 220, 140)
+btn.Text             = "🎤 RAP: ON"
+btn.TextSize         = 14
+btn.Font             = Enum.Font.GothamBold
+btn.AutoButtonColor  = false
+btn.ZIndex           = 999
+btn.Parent           = sg
 
-local corner = Instance.new("UICorner")
-corner.CornerRadius = UDim.new(0, 8)
-corner.Parent = btn
-
-local stroke = Instance.new("UIStroke")
+Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
+local stroke = Instance.new("UIStroke", btn)
 stroke.Color     = Color3.fromRGB(80, 220, 140)
 stroke.Thickness = 1.5
-stroke.Parent    = btn
 
--- Draggable
 local dragging, dragStart, startPos
 btn.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1
@@ -80,19 +75,13 @@ end)
 UIS.InputEnded:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1
     or input.UserInputType == Enum.UserInputType.Touch then
-        local dist = dragging and (input.Position - dragStart).Magnitude or 0
+        local d = dragging and (input.Position - dragStart).Magnitude or 0
         dragging = false
-        if dist < 8 then
+        if d < 8 then
             enabled = not enabled
-            if enabled then
-                btn.Text             = "🎤 RAP: ON"
-                btn.TextColor3       = Color3.fromRGB(80, 220, 140)
-                stroke.Color         = Color3.fromRGB(80, 220, 140)
-            else
-                btn.Text             = "🎤 RAP: OFF"
-                btn.TextColor3       = Color3.fromRGB(220, 80, 80)
-                stroke.Color         = Color3.fromRGB(220, 80, 80)
-            end
+            btn.Text       = enabled and "🎤 RAP: ON"  or "🎤 RAP: OFF"
+            btn.TextColor3 = enabled and Color3.fromRGB(80,220,140) or Color3.fromRGB(220,80,80)
+            stroke.Color   = enabled and Color3.fromRGB(80,220,140) or Color3.fromRGB(220,80,80)
         end
     end
 end)
@@ -133,8 +122,11 @@ local function startAuto()
             end
             if not idx then continue end
 
-            local id   = tostring(node)
-            local curY = node.AbsolutePosition.Y
+            local id      = tostring(node)
+            local curY    = node.AbsolutePosition.Y
+            -- Calcular threshold dinámico basado en nodeSize real
+            local nodeMin = math.min(node.AbsoluteSize.X, node.AbsoluteSize.Y)
+            local thresh  = nodeMin * THRESHOLD_RATIO
 
             if not nodeData[id] then
                 nodeData[id] = { pressed = false, lastY = curY }
@@ -154,7 +146,7 @@ local function startAuto()
 
             local dist = (node.AbsolutePosition - target.AbsolutePosition).Magnitude
 
-            if dist < DIST_THRESHOLD then
+            if dist < thresh then
                 data.pressed = true
                 pressKey(idx)
             end
@@ -167,26 +159,15 @@ local function stopAuto()
     nodeData = {}
 end
 
--- ══════════════════════════════════════
---  AUTO ACTIVAR CON RapUI
--- ══════════════════════════════════════
 LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
-    if child.Name == "RapUI" then
-        task.wait(1)
-        startAuto()
-    end
+    if child.Name == "RapUI" then task.wait(1) startAuto() end
 end)
 LocalPlayer.PlayerGui.ChildRemoved:Connect(function(child)
-    if child.Name == "RapUI" then
-        stopAuto()
-    end
+    if child.Name == "RapUI" then stopAuto() end
 end)
 
 if LocalPlayer.PlayerGui:FindFirstChild("RapUI") then startAuto() end
 
--- ══════════════════════════════════════
---  UNLOAD
--- ══════════════════════════════════════
 getgenv().WH01AM_RAP_START  = startAuto
 getgenv().WH01AM_RAP_STOP   = stopAuto
 getgenv().WH01AM_RAP_UNLOAD = function()
@@ -196,4 +177,7 @@ getgenv().WH01AM_RAP_UNLOAD = function()
     warn("[WH01AM] Auto Rapper descargado")
 end
 
-warn("[WH01AM] Auto Rapper listo — " .. (isMobile and "Mobile dist<15" or "PC dist<30"))
+warn(string.format("[WH01AM] Auto Rapper listo — %s | ratio=%.2f | thresh≈%.1f",
+    isMobile and "Mobile" or "PC",
+    THRESHOLD_RATIO,
+    35.5 * THRESHOLD_RATIO))
