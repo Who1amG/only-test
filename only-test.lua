@@ -10,43 +10,52 @@ if getgenv().WH01AM_RAP_UNLOAD then
     getgenv().WH01AM_RAP_UNLOAD()
 end
 
+local isMobile = UIS.TouchEnabled and not UIS.KeyboardEnabled
 local KEYS = {[1]=Enum.KeyCode.H,[2]=Enum.KeyCode.J,[3]=Enum.KeyCode.K,[4]=Enum.KeyCode.L}
 local nodeData = {}
 local rapConn  = nil
 local enabled  = true
 
+-- PC: dist < 30 (probado y funciona)
+-- Mobile: nodeMin=35.5, dist < 30 da Bad porque el nodo es más pequeño
+-- En mobile usar dist absoluta < 12 que es proporcional a 30/68 * 35 = 15
+-- Pero eso da miss... entonces el problema es el loop frequency
+-- Solución: en mobile usar stepped que corre cada frame de render
+local DIST_PC     = 30
+local DIST_MOBILE = 30  -- mismo threshold pero con RenderStepped
+
 -- UI
 local sg = Instance.new("ScreenGui")
-sg.Name           = "WH01AM_RAP_UI"
-sg.ResetOnSpawn   = false
+sg.Name = "WH01AM_RAP_UI"
+sg.ResetOnSpawn = false
 sg.IgnoreGuiInset = true
-sg.DisplayOrder   = 999
-sg.Parent         = game:GetService("CoreGui")
+sg.DisplayOrder = 999
+sg.Parent = game:GetService("CoreGui")
 
 local btn = Instance.new("TextButton")
-btn.Size             = UDim2.new(0, 120, 0, 36)
-btn.Position         = UDim2.new(0, 10, 0, 10)
+btn.Size = UDim2.new(0, 120, 0, 36)
+btn.Position = UDim2.new(0, 10, 0, 10)
 btn.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
-btn.TextColor3       = Color3.fromRGB(80, 220, 140)
-btn.Text             = "🎤 RAP: ON"
-btn.TextSize         = 14
-btn.Font             = Enum.Font.GothamBold
-btn.AutoButtonColor  = false
-btn.ZIndex           = 999
-btn.Parent           = sg
+btn.TextColor3 = Color3.fromRGB(80, 220, 140)
+btn.Text = "🎤 RAP: ON"
+btn.TextSize = 14
+btn.Font = Enum.Font.GothamBold
+btn.AutoButtonColor = false
+btn.ZIndex = 999
+btn.Parent = sg
 
 Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
 local stroke = Instance.new("UIStroke", btn)
-stroke.Color     = Color3.fromRGB(80, 220, 140)
+stroke.Color = Color3.fromRGB(80, 220, 140)
 stroke.Thickness = 1.5
 
 local dragging, dragStart, startPos
 btn.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1
     or input.UserInputType == Enum.UserInputType.Touch then
-        dragging  = true
+        dragging = true
         dragStart = input.Position
-        startPos  = btn.Position
+        startPos = btn.Position
     end
 end)
 UIS.InputChanged:Connect(function(input)
@@ -66,63 +75,71 @@ UIS.InputEnded:Connect(function(input)
         dragging = false
         if d < 8 then
             enabled = not enabled
-            btn.Text       = enabled and "🎤 RAP: ON"  or "🎤 RAP: OFF"
+            btn.Text = enabled and "🎤 RAP: ON" or "🎤 RAP: OFF"
             btn.TextColor3 = enabled and Color3.fromRGB(80,220,140) or Color3.fromRGB(220,80,80)
-            stroke.Color   = enabled and Color3.fromRGB(80,220,140) or Color3.fromRGB(220,80,80)
+            stroke.Color = enabled and Color3.fromRGB(80,220,140) or Color3.fromRGB(220,80,80)
         end
     end
 end)
 
 local function pressKey(idx)
-    vim:SendKeyEvent(true,  KEYS[idx], false, game)
+    vim:SendKeyEvent(true, KEYS[idx], false, game)
     vim:SendKeyEvent(false, KEYS[idx], false, game)
+end
+
+local function checkNodes(dist_threshold)
+    local ui = LocalPlayer.PlayerGui:FindFirstChild("RapUI")
+    if not ui then return end
+    local Game = ui.MainFrame:FindFirstChild("Game")
+    if not Game or not Game.Visible then return end
+    local BG = Game:FindFirstChild("BG")
+    local Holder = BG and BG:FindFirstChild("Holder")
+    if not BG or not Holder then return end
+
+    for _, node in ipairs(BG:GetChildren()) do
+        if not node:IsA("ImageLabel") or not node.Visible then continue end
+        local okT, tags = pcall(CS.GetTags, CS, node)
+        if not okT then continue end
+        local idx = nil
+        for _, tag in ipairs(tags) do
+            local n = tag:match("Node (%d+)")
+            if n then idx = tonumber(n) break end
+        end
+        if not idx then continue end
+
+        local id   = tostring(node)
+        local curY = node.AbsolutePosition.Y
+
+        if not nodeData[id] then
+            nodeData[id] = { pressed = false, lastY = curY }
+        end
+        local data = nodeData[id]
+        if curY < data.lastY - 100 then data.pressed = false end
+        data.lastY = curY
+        if data.pressed then continue end
+
+        local target = Holder:FindFirstChild(tostring(idx))
+        if not target then continue end
+
+        local dist = (node.AbsolutePosition - target.AbsolutePosition).Magnitude
+        if dist < dist_threshold then
+            data.pressed = true
+            pressKey(idx)
+        end
+    end
 end
 
 local function startAuto()
     if rapConn then rapConn:Disconnect() end
     nodeData = {}
 
-    rapConn = RunService.Heartbeat:Connect(function()
+    -- Mobile usa RenderStepped (más frames), PC usa Heartbeat
+    local signal = isMobile and RunService.RenderStepped or RunService.Heartbeat
+    local threshold = isMobile and DIST_MOBILE or DIST_PC
+
+    rapConn = signal:Connect(function()
         if not enabled then return end
-        local ui = LocalPlayer.PlayerGui:FindFirstChild("RapUI")
-        if not ui then return end
-        local Game = ui.MainFrame:FindFirstChild("Game")
-        if not Game or not Game.Visible then return end
-        local BG     = Game:FindFirstChild("BG")
-        local Holder = BG and BG:FindFirstChild("Holder")
-        if not BG or not Holder then return end
-
-        for _, node in ipairs(BG:GetChildren()) do
-            if not node:IsA("ImageLabel") or not node.Visible then continue end
-            local okT, tags = pcall(CS.GetTags, CS, node)
-            if not okT then continue end
-            local idx = nil
-            for _, tag in ipairs(tags) do
-                local n = tag:match("Node (%d+)")
-                if n then idx = tonumber(n) break end
-            end
-            if not idx then continue end
-
-            local id   = tostring(node)
-            local curY = node.AbsolutePosition.Y
-
-            if not nodeData[id] then
-                nodeData[id] = { pressed = false, lastY = curY }
-            end
-            local data = nodeData[id]
-            if curY < data.lastY - 100 then data.pressed = false end
-            data.lastY = curY
-            if data.pressed then continue end
-
-            local target = Holder:FindFirstChild(tostring(idx))
-            if not target then continue end
-
-            local dist = (node.AbsolutePosition - target.AbsolutePosition).Magnitude
-            if dist < 30 then
-                data.pressed = true
-                pressKey(idx)
-            end
-        end
+        checkNodes(threshold)
     end)
 end
 
@@ -148,4 +165,4 @@ getgenv().WH01AM_RAP_UNLOAD = function()
     warn("[WH01AM] Auto Rapper descargado")
 end
 
-warn("[WH01AM] Auto Rapper listo")
+warn("[WH01AM] Auto Rapper listo — " .. (isMobile and "Mobile/RenderStepped" or "PC/Heartbeat"))
