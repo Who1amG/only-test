@@ -1,4 +1,4 @@
--- WH01AM | Auto Rapper | Vice City 2 | Multi-Resolution
+-- WH01AM | Auto Rapper | Vice City 2 | Multi-Resolution v2
 local Players    = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local CS         = game:GetService("CollectionService")
@@ -12,6 +12,12 @@ local KEYS = {
     [4] = Enum.KeyCode.L,
 }
 
+-- Threshold calibrado para mobile y PC
+-- Mobile: nodo ~35px, pico ~0.65-0.98
+-- PC: nodo ~68px, pico similar
+-- Presionar apenas pct sube de 0.50 = centro de la zona = Perfect
+local HIT_PCT = 0.50
+
 local nodeData = {}
 local rapConn  = nil
 
@@ -20,29 +26,16 @@ local function pressKey(idx)
     vim:SendKeyEvent(false, KEYS[idx], false, game)
 end
 
-local function getIntersection(node, target)
+local function getIntersectionPct(node, target)
     local nPos  = node.AbsolutePosition
     local nSize = node.AbsoluteSize
     local tPos  = target.AbsolutePosition
     local tSize = target.AbsoluteSize
-
-    local ix = math.max(0, math.min(nPos.X + nSize.X, tPos.X + tSize.X) - math.max(nPos.X, tPos.X))
-    local iy = math.max(0, math.min(nPos.Y + nSize.Y, tPos.Y + tSize.Y) - math.max(nPos.Y, tPos.Y))
-    return math.min(ix, iy)
-end
-
-local function getIntersectionPercent(node, target)
-    local intersect = getIntersection(node, target)
-    local nodeSize  = math.min(node.AbsoluteSize.X, node.AbsoluteSize.Y)
-    if nodeSize <= 0 then return 0 end
-    return intersect / nodeSize
-end
-
-local function getRating(pct)
-    if pct > 0.55 then return "Perfect"
-    elseif pct > 0.20 then return "Okay"
-    elseif pct > 0.07 then return "Bad"
-    else return "Miss" end
+    local ix = math.max(0, math.min(nPos.X+nSize.X, tPos.X+tSize.X) - math.max(nPos.X, tPos.X))
+    local iy = math.max(0, math.min(nPos.Y+nSize.Y, tPos.Y+tSize.Y) - math.max(nPos.Y, tPos.Y))
+    local nodeMin = math.min(nSize.X, nSize.Y)
+    if nodeMin <= 0 then return 0 end
+    return math.min(ix, iy) / nodeMin
 end
 
 local function startAuto()
@@ -75,15 +68,14 @@ local function startAuto()
             local curY = node.AbsolutePosition.Y
 
             if not nodeData[id] then
-                nodeData[id] = { pressed = false, lastY = curY, prevPct = 0 }
+                nodeData[id] = { pressed = false, lastY = curY }
             end
 
             local data = nodeData[id]
 
             -- Resetear si reusado
-            if curY < data.lastY - 50 then
+            if curY < data.lastY - 30 then
                 data.pressed = false
-                data.prevPct = 0
             end
             data.lastY = curY
 
@@ -92,18 +84,13 @@ local function startAuto()
             local target = Holder:FindFirstChild(tostring(idx))
             if not target then continue end
 
-            local pct    = getIntersectionPercent(node, target)
-            local rating = getRating(pct)
+            local pct = getIntersectionPct(node, target)
 
-            -- Presionar en Perfect O cuando el pct empieza a bajar después de subir
-            local peaked = pct < data.prevPct and data.prevPct > 0.20
-
-            if rating == "Perfect" or peaked then
+            -- Presionar apenas cruza el threshold
+            if pct >= HIT_PCT then
                 data.pressed = true
                 pressKey(idx)
             end
-
-            data.prevPct = pct
         end
     end)
 end
@@ -130,4 +117,4 @@ if LocalPlayer.PlayerGui:FindFirstChild("RapUI") then startAuto() end
 getgenv().WH01AM_RAP_START = startAuto
 getgenv().WH01AM_RAP_STOP  = stopAuto
 
-warn("[WH01AM] Auto Rapper listo — Multi-Resolution")
+warn("[WH01AM] Auto Rapper listo — v2 Multi-Resolution")
