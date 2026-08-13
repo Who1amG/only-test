@@ -1,22 +1,18 @@
--- WH01AM | Auto Rapper | Vice City 2 | Multi-Resolution v3
+-- WH01AM | Auto Rapper | Vice City 2 | v4 Early Hit
 local Players    = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local CS         = game:GetService("CollectionService")
 local vim        = game:GetService("VirtualInputManager")
 local LocalPlayer = Players.LocalPlayer
 
-local KEYS = {
-    [1] = Enum.KeyCode.H,
-    [2] = Enum.KeyCode.J,
-    [3] = Enum.KeyCode.K,
-    [4] = Enum.KeyCode.L,
-}
+local KEYS = {[1]=Enum.KeyCode.H,[2]=Enum.KeyCode.J,[3]=Enum.KeyCode.K,[4]=Enum.KeyCode.L}
 
 local nodeData = {}
 local rapConn  = nil
+local isMobile = game:GetService("UserInputService").TouchEnabled and not game:GetService("UserInputService").KeyboardEnabled
 
 local function pressKey(idx)
-    vim:SendKeyEvent(true,  KEYS[idx], false, game)
+    vim:SendKeyEvent(true, KEYS[idx], false, game)
     vim:SendKeyEvent(false, KEYS[idx], false, game)
 end
 
@@ -32,9 +28,16 @@ local function getIntersectionPct(node, target)
     return math.min(ix, iy) / nodeMin
 end
 
+-- En mobile presionar más temprano porque el Heartbeat es más lento
+-- En PC presionar en el pico
+local HIT_PCT_MOBILE = 0.15  -- presionar apenas entra
+local HIT_PCT_PC     = 0.55  -- presionar en el pico
+
 local function startAuto()
     if rapConn then rapConn:Disconnect() end
     nodeData = {}
+
+    local HIT_PCT = isMobile and HIT_PCT_MOBILE or HIT_PCT_PC
 
     rapConn = RunService.Heartbeat:Connect(function()
         local ui = LocalPlayer.PlayerGui:FindFirstChild("RapUI")
@@ -62,15 +65,13 @@ local function startAuto()
             local curY = node.AbsolutePosition.Y
 
             if not nodeData[id] then
-                nodeData[id] = { pressed = false, lastY = curY, prevPct = 0 }
+                nodeData[id] = { pressed = false, lastY = curY }
             end
 
             local data = nodeData[id]
 
-            -- Resetear si reusado
             if curY < data.lastY - 30 then
-                data.pressed  = false
-                data.prevPct  = 0
+                data.pressed = false
             end
             data.lastY = curY
 
@@ -79,18 +80,12 @@ local function startAuto()
             local target = Holder:FindFirstChild(tostring(idx))
             if not target then continue end
 
-            local pct  = getIntersectionPct(node, target)
-            local jump = pct - data.prevPct
+            local pct = getIntersectionPct(node, target)
 
-            -- Presionar cuando:
-            -- 1. Salto grande en un frame (mobile) = nodo entró de golpe
-            -- 2. pct alto y estable (PC) = nodo en zona lentamente
-            if (jump > 0.30 and pct > 0.40) or (pct > 0.60 and jump > 0) then
+            if pct >= HIT_PCT then
                 data.pressed = true
                 pressKey(idx)
             end
-
-            data.prevPct = pct
         end
     end)
 end
@@ -101,15 +96,10 @@ local function stopAuto()
 end
 
 LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
-    if child.Name == "RapUI" then
-        task.wait(1)
-        startAuto()
-    end
+    if child.Name == "RapUI" then task.wait(1) startAuto() end
 end)
 LocalPlayer.PlayerGui.ChildRemoved:Connect(function(child)
-    if child.Name == "RapUI" then
-        stopAuto()
-    end
+    if child.Name == "RapUI" then stopAuto() end
 end)
 
 if LocalPlayer.PlayerGui:FindFirstChild("RapUI") then startAuto() end
@@ -117,4 +107,4 @@ if LocalPlayer.PlayerGui:FindFirstChild("RapUI") then startAuto() end
 getgenv().WH01AM_RAP_START = startAuto
 getgenv().WH01AM_RAP_STOP  = stopAuto
 
-warn("[WH01AM] Auto Rapper listo — v3")
+warn("[WH01AM] Auto Rapper v4 — mobile=" .. tostring(isMobile))
